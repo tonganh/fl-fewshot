@@ -11,7 +11,7 @@ class Server(BasicServer):
         self.buff_folder = f"state{K*3}-action{K*3}"
 
         now = datetime.now()
-        dt_string = now.strftime("%d/%m/%Y-%H:%M:%S")
+        dt_string = now.strftime("%d:%m:%Y-%H:%M:%S")
         self.buff_file = dt_string
 
     def unpack(self, packages_received_from_clients):
