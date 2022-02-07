@@ -22,7 +22,11 @@ def plot(frame_idx, rewards):
 
 
 def get_state(losses, n_samples, n_epochs):
-    retval = torch.Tensor(losses + n_samples + n_epochs)
+    # print("Losses: ", len(losses), losses)
+    # print("N_samples: ", len(n_samples), n_samples)
+    # print("N_epochs: ", len(n_epochs), n_epochs)
+
+    retval = torch.Tensor(losses + n_samples + n_epochs).double()
     return retval.flatten()
 
 

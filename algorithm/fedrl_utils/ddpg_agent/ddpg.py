@@ -1,12 +1,12 @@
 from pathlib import Path
-from ddpg_agent.utils import *
-from ddpg_agent.networks import *
-from ddpg_agent.policy import *
-from ddpg_agent.buffer import *
+from algorithm.fedrl_utils.ddpg_agent.utils import *
+from algorithm.fedrl_utils.ddpg_agent.networks import *
+from algorithm.fedrl_utils.ddpg_agent.policy import *
+from algorithm.fedrl_utils.ddpg_agent.buffer import *
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from ddpg_agent.policy import NormalizedActions
+from algorithm.fedrl_utils.ddpg_agent.policy import NormalizedActions
 import pickle
 
 class DDPG_Agent(nn.Module):
@@ -32,24 +32,28 @@ class DDPG_Agent(nn.Module):
         self.soft_tau = soft_tau
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        print("Init State dim", state_dim)      # K x 3
+        print("\nInit State dim", state_dim)      # K x 3
         print("Init Action dim", action_dim)    # K x 3
 
-        self.value_net = ValueNetwork(num_input=state_dim + action_dim, hidden_size=hidden_dim).to(self.device).double()
+        self.value_net = ValueNetwork(num_inputs=state_dim + action_dim, hidden_size=hidden_dim).to(self.device).double()
         self.policy_net = PolicyNetwork(num_inputs=state_dim, num_outputs=action_dim, hidden_size=hidden_dim).to(self.device).double()
 
-        self.target_value_net = ValueNetwork(num_input=state_dim + action_dim, hidden_size=hidden_dim).to(self.device).double()
+        self.target_value_net = ValueNetwork(num_inputs=state_dim + action_dim, hidden_size=hidden_dim).to(self.device).double()
         self.target_policy_net = PolicyNetwork(num_inputs=state_dim, num_outputs=action_dim, hidden_size=hidden_dim).to(self.device).double()
 
 
         model_path = "../models"
         if Path(f"{model_path}/policy_net.pth").exists():
+            print("Loaing policy_net...")
             self.policy_net.load_state_dict(torch.load(f"{model_path}/policy_net.pth"))
         if Path(f"{model_path}/value_net.pth").exists():
+            print("Loaing value_net...")
             self.value_net.load_state_dict(torch.load(f"{model_path}/value_net.pth"))
         if Path(f"{model_path}/target_policy_net.pth").exists():
+            print("Loaing target_policy_net...")
             self.target_policy_net.load_state_dict(torch.load(f"{model_path}/target_policy_net.pth"))
         if Path(f"{model_path}/target_value_net.pth").exists():
+            print("Loaing target_value_net...")
             self.target_value_net.load_state_dict(torch.load(f"{model_path}/target_value_net.pth"))
 
 
@@ -83,7 +87,7 @@ class DDPG_Agent(nn.Module):
         state = get_state(losses, n_samples, n_epochs)
         state = torch.DoubleTensor(state).unsqueeze(0).to(self.device)  # current state
         if time_step > 0:
-            self.memory.update(r=get_reward())
+            self.memory.update(r=-np.sum(losses))
 
         action = self.policy_net.get_action(state)
         self.memory.act(state, action)
@@ -101,5 +105,8 @@ class DDPG_Agent(nn.Module):
 
 
     def dump_buffer(self, buffer_path, run_name):
+        if not Path(buffer_path).exists():
+            os.system(f"mkdir -p {buffer_path}")
+            
         with open(f"{buffer_path}/{run_name}.exp", "ab") as fp:
             pickle.dump(self.replay_buffer.buffer, fp)

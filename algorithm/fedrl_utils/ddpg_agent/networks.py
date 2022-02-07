@@ -8,10 +8,10 @@ def freeze_layer(layer):
         
 
 class ValueNetwork(nn.Module):
-    def __init__(self, num_input, hidden_size, init_w=1e-1):
+    def __init__(self, num_inputs, hidden_size, init_w=1e-1):
         super(ValueNetwork, self).__init__()
         
-        self.linear1 = nn.Linear(num_input, hidden_size)
+        self.linear1 = nn.Linear(num_inputs, hidden_size)
         self.linear2 = nn.Linear(hidden_size, hidden_size)
         self.linear3 = nn.Linear(hidden_size, 1)
 
@@ -33,8 +33,8 @@ class PolicyNetwork(nn.Module):
     def __init__(self, num_inputs, num_outputs, hidden_size, init_w=1e-1):
         super(PolicyNetwork, self).__init__()
 
-        assert num_outputs % 3 != 0, "The network is 3-output, hence the number of outputs must be a multiplicity of 3"
-        num_outputs = num_outputs / 3
+        assert num_outputs % 3 == 0, "The network is 3-output, hence the number of outputs must be a multiplicity of 3"
+        num_outputs = int(num_outputs / 3)
 
         self.linear1 = nn.Linear(num_inputs, hidden_size)
         self.linear2 = nn.Linear(hidden_size, hidden_size)

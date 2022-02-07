@@ -21,7 +21,7 @@ def read_option():
     parser.add_argument('--model', help='name of model;', type=str, default='cnn')
 
     # methods of server side for sampling and aggregating
-    parser.add_argument('--sample', help='methods for sampling clients', type=str, choices=sample_list, default='md')
+    parser.add_argument('--sample', help='methods for sampling clients', type=str, choices=sample_list, default='uniform')
     parser.add_argument('--aggregate', help='methods for aggregating models', type=str, choices=agg_list, default='uniform')
     parser.add_argument('--learning_rate_decay', help='learning rate decay for the training process;', type=float, default=0.998)
     parser.add_argument('--weight_decay', help='weight decay for the training process', type=float, default=0)
