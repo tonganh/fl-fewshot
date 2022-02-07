@@ -43,7 +43,7 @@ class Server(BasicServer):
     
     def run(self):
         super().run()
-        self.ddpg_agent.dump_buffer(f"fedrl_utils/buffers/{self.buff_folder}", self.buff_file)
+        self.ddpg_agent.dump_buffer(f"algorithm/fedrl_utils/buffers/{self.buff_folder}", self.buff_file)
         return
 
 
