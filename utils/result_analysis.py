@@ -145,6 +145,7 @@ if __name__ == '__main__':
     task = 'mnist_cnum100_dist0_skew0_seed0'
     headers = [
         'fedavg',
+        'fedrl',
     ]
     flt = {
         # 'E': '5',
@@ -174,10 +175,13 @@ if __name__ == '__main__':
     # create legends
     legends = create_legend(records, ['P','LR'])
     for curve in curve_names:
-        draw_curve(dicts, curve, legends, 200)
+        plt.figure()
+        draw_curve(dicts, curve, legends)
         plt.title(task)
         plt.xlabel("communication rounds")
         plt.ylabel(curve)
         ax = plt.gca()
         plt.grid()
         plt.show()
+        plt.legend()
+        plt.savefig(f"figures/{task}.{curve}.png")

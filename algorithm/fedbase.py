@@ -207,7 +207,8 @@ class BasicServer():
         ==============================================================================================|============================
         N/K * Σpk * model_k                 |1/K * Σmodel_k                  |(1-Σpk) * w_old + Σpk * model_k     |Σ(pk/Σpk) * model_k
         """
-        if not models: return self.model
+        if not models: 
+            return self.model
         if self.agg_option == 'weighted_scale':
             K = len(models)
             N = self.num_clients
@@ -260,7 +261,8 @@ class BasicServer():
             eval_metric /= len(self.test_data)
             loss /= len(self.test_data)
             return eval_metric, loss
-        else: return -1,-1
+        else: 
+            return -1,-1
 
 class BasicClient():
     def __init__(self, option, name='', train_data=None, valid_data=None):

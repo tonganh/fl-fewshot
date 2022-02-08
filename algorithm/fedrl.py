@@ -14,6 +14,8 @@ class Server(BasicServer):
         dt_string = now.strftime("%d:%m:%Y-%H:%M:%S")
         self.buff_file = dt_string
 
+        self.prev_reward = None
+
     def unpack(self, packages_received_from_clients):
         
         assert self.clients_per_round == len(packages_received_from_clients), "Wrong at num clients_per_round"
@@ -37,9 +39,16 @@ class Server(BasicServer):
             "n_epochs": n_epochs
         }
 
-        priority = self.ddpg_agent.get_action(observation, time_step=t).tolist()
+        priority = self.ddpg_agent.get_action(observation, prev_reward=self.prev_reward).tolist()
         self.model = self.aggregate(models, p=priority)
+        fedavg_model = self.aggregate(models, p = [1.0 * self.client_vols[cid]/self.data_vol for cid in self.selected_clients])
+
+        fedrl_test_acc, _ = self.test(model=self.model)
+        fedavg_test_acc, _ = self.test(model=fedavg_model)
+
+        self.prev_reward = fedrl_test_acc - fedavg_test_acc
         return
+
     
     def run(self):
         super().run()

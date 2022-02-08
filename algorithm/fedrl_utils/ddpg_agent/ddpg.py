@@ -77,7 +77,7 @@ class DDPG_Agent(nn.Module):
             target_param.data.copy_(param.data)
 
 
-    def get_action(self, observation, time_step):
+    def get_action(self, observation, prev_reward=None):
         done = observation['done']
         losses = observation['losses']
         n_samples = observation['n_samples']
@@ -86,8 +86,8 @@ class DDPG_Agent(nn.Module):
         # reach to maximum step for each episode or get the done for this iteration
         state = get_state(losses, n_samples, n_epochs)
         state = torch.DoubleTensor(state).unsqueeze(0).to(self.device)  # current state
-        if time_step > 0:
-            self.memory.update(r=-np.sum(losses))
+        if prev_reward is not None:
+            self.memory.update(r=prev_reward)
 
         action = self.policy_net.get_action(state)
         self.memory.act(state, action)
