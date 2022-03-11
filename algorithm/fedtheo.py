@@ -38,9 +38,7 @@ class Server(BasicServer):
 
         if self.optim_ratio is None:
             self.optim_ratio = self.process_insight(insights)
-            self.model = self.aggregate(models, p = [1.0 * self.client_vols[cid]/self.data_vol for cid in self.selected_clients])
-        else:
-            self.model = self.aggregate(models, p = self.optim_ratio)
+        self.model = self.aggregate(models, p = self.optim_ratio)
         return
     
 
