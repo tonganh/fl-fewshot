@@ -23,6 +23,7 @@ class Server(BasicServer):
         super(Server, self).__init__(option, model, clients, test_data)
         self.rival_list = None
         self.rival_thr = 1
+        self.model_list = None
     
     
     def communicate(self, selected_clients):
@@ -60,17 +61,17 @@ class Server(BasicServer):
     
     def iterate(self, t):
         self.selected_clients = self.sample()
-        models, train_losses = self.communicate(self.selected_clients)
+        self.model_list, train_losses = self.communicate(self.selected_clients)
         
-        self.get_rival_list(models)
+        self.create_rival_list(self.model_list)
         
         if not self.selected_clients:
             return
-        self.model = self.aggregate(models, p = [1.0 * self.client_vols[cid]/self.data_vol for cid in self.selected_clients])
+        self.model = self.aggregate(self.model_list, p = [1.0 * self.client_vols[cid]/self.data_vol for cid in self.selected_clients])
         return
 
     
-    def get_rival_list(self, model_list):
+    def create_rival_list(self, model_list):
         """
         Considering model a and model b
         If similarity(a, b) < threshold then a is rival of b
@@ -93,8 +94,11 @@ class Server(BasicServer):
     
     
     def get_rival_of(self, client_id):
-        i = self.selected_clients.index(client_id)
-        return self.rival_list[i]
+        if self.rival_list:
+            i = self.selected_clients.index(client_id)
+            return [self.model_list[j] for j in self.rival_list[i]]
+        else:
+            return []
     
 
 class Client(BasicClient):
@@ -126,8 +130,10 @@ class Client(BasicClient):
                 for rival in rival_list:
                     for pm, ps in zip(model.parameters(), rival.parameters()):
                         divergence_loss += torch.sum(torch.pow(pm-ps,2))
-                
-                loss = self.calculator.get_loss(model, batch_data) + 0.05 * divergence_loss
+                if len(rival_list) > 0:
+                    loss = self.calculator.get_loss(model, batch_data) + 0.05 * 1 / len(rival_list) * divergence_loss
+                else:
+                    loss = self.calculator.get_loss(model, batch_data)
                 loss.backward()
                 optimizer.step()
         return
