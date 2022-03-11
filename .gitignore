@@ -3,3 +3,4 @@
 /algorithm/fedrl_utils/ddpg_agent/__pycache__/
 /benchmark/
 /fedtask/
+.vscode*
