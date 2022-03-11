@@ -79,12 +79,10 @@ class DDPG_Agent(nn.Module):
 
     def get_action(self, observation, prev_reward=None):
         done = observation['done']
-        losses = observation['losses']
-        n_samples = observation['n_samples']
-        n_epochs = observation['n_epochs']
+        models = observation['models']
 
         # reach to maximum step for each episode or get the done for this iteration
-        state = get_state(losses, n_samples, n_epochs)
+        state = get_state(models)
         state = torch.DoubleTensor(state).unsqueeze(0).to(self.device)  # current state
         if prev_reward is not None:
             self.memory.update(r=prev_reward)
@@ -96,6 +94,9 @@ class DDPG_Agent(nn.Module):
         if self.memory.get_last_record() is None:
             self.step += 1
             return action
+        
+        if len(self.replay_buffer) >= self.batch_size:
+            self.ddpg_update()
 
         s, a, r, s_next = self.memory.get_last_record()
         self.replay_buffer.push(s, a, r, s_next, done)
@@ -103,6 +104,43 @@ class DDPG_Agent(nn.Module):
 
         return action
 
+
+    def ddpg_update(self, min_value=-np.inf, max_value=np.inf):
+    
+        for _ in range(int(len(self.replay_buffer)/self.batch_size)):
+            state, action, reward, next_state, done = self.replay_buffer.sample(self.batch_size)
+
+            state = torch.DoubleTensor(state).squeeze().to(self.device)
+            next_state = torch.DoubleTensor(next_state).squeeze().to(self.device)
+            action = torch.DoubleTensor(action).squeeze().to(self.device)
+            reward = torch.DoubleTensor(reward).to(self.device)
+            done = torch.DoubleTensor(np.float32(done)).to(self.device)
+
+            policy_loss = self.value_net(state, self.policy_net(state), self.batch_size)
+            policy_loss = -policy_loss.mean()
+            next_action = self.target_policy_net(next_state)
+            target_value = self.target_value_net(next_state, next_action.detach(), self.batch_size)
+
+            expected_value = reward + (1.0 - done) * self.gamma * target_value.squeeze()
+            expected_value = torch.clamp(expected_value, min_value, max_value)
+
+            value = self.value_net(state, action, self.batch_size).squeeze()
+
+            value_loss = self.value_criterion(value, expected_value)
+
+            self.policy_optimizer.zero_grad()
+            policy_loss.backward()
+            self.policy_optimizer.step()
+
+            self.value_optimizer.zero_grad()
+            value_loss.backward()
+            self.value_optimizer.step()
+
+        for target_param, param in zip(self.target_value_net.parameters(), self.value_net.parameters()):
+            target_param.data.copy_(target_param.data * (1.0 - self.soft_tau) + param.data * self.soft_tau)
+
+        for target_param, param in zip(self.target_policy_net.parameters(), self.policy_net.parameters()):
+            target_param.data.copy_(target_param.data * (1.0 - self.soft_tau) + param.data * self.soft_tau)
 
     def dump_buffer(self, buffer_path, run_name):
         if not Path(buffer_path).exists():
