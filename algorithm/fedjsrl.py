@@ -18,6 +18,7 @@ class Server(BasicServer):
 
         self.prev_reward = None
 
+
     def unpack(self, packages_received_from_clients):
         
         assert self.clients_per_round == len(packages_received_from_clients), "Wrong at num clients_per_round"
@@ -25,6 +26,7 @@ class Server(BasicServer):
         models = [cp["model"] for cp in packages_received_from_clients]
         train_losses = [cp["train_loss"] for cp in packages_received_from_clients]
         return models, train_losses
+
 
     def iterate(self, t):
         self.selected_clients = self.sample()

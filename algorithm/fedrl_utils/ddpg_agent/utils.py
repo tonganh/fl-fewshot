@@ -27,9 +27,9 @@ def get_state(models):
     
     last_layers = []
     for model in models:
-        last_layers.append(torch.flatten(list(model.parameters())[-2]))
+        last_layers.append(torch.flatten(list(model.parameters())[-2]).detach().cpu())
     
-    retval = torch.Tensor(last_layers)
+    retval = torch.vstack(last_layers)
     retval = retval.view(len(models), -1)
     
     retval = mds.fit_transform(retval)

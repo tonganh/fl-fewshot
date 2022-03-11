@@ -15,14 +15,11 @@ class DDPG_Agent(nn.Module):
         state_dim=3,
         action_dim=1,
         hidden_dim=256,
-        init_w=1e-3,
         value_lr=1e-3,
         policy_lr=1e-3,
         replay_buffer_size=1000000,
         max_steps=16*50,
-        max_frames=12000,
         batch_size=4,
-        beta=0.45,
         log_dir="./log/epochs",
         gamma = 0.99,
         soft_tau = 2e-2,
@@ -30,9 +27,9 @@ class DDPG_Agent(nn.Module):
         super(DDPG_Agent, self).__init__()
         self.gamma = gamma
         self.soft_tau = soft_tau
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
 
-        print("\nInit State dim", state_dim)      # K x 3
+        print("\nInit State dim", state_dim)    # K x K
         print("Init Action dim", action_dim)    # K x 3
 
         self.value_net = ValueNetwork(num_inputs=state_dim + action_dim, hidden_size=hidden_dim).to(self.device).double()
@@ -136,11 +133,12 @@ class DDPG_Agent(nn.Module):
             value_loss.backward()
             self.value_optimizer.step()
 
-        for target_param, param in zip(self.target_value_net.parameters(), self.value_net.parameters()):
-            target_param.data.copy_(target_param.data * (1.0 - self.soft_tau) + param.data * self.soft_tau)
+            for target_param, param in zip(self.target_value_net.parameters(), self.value_net.parameters()):
+                target_param.data.copy_(target_param.data * (1.0 - self.soft_tau) + param.data * self.soft_tau)
 
-        for target_param, param in zip(self.target_policy_net.parameters(), self.policy_net.parameters()):
-            target_param.data.copy_(target_param.data * (1.0 - self.soft_tau) + param.data * self.soft_tau)
+            for target_param, param in zip(self.target_policy_net.parameters(), self.policy_net.parameters()):
+                target_param.data.copy_(target_param.data * (1.0 - self.soft_tau) + param.data * self.soft_tau)
+
 
     def dump_buffer(self, buffer_path, run_name):
         if not Path(buffer_path).exists():
