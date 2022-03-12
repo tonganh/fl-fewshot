@@ -12,7 +12,7 @@ import pickle
 
 def transform_action(action):
     action = action.view(3,-1)
-    return torch.flatten(action[1] * (1 + 1/10 * action[2]))
+    return torch.flatten(action[1] + 1/10 * action[2])
 
 
 class DDPG_Agent(nn.Module):
