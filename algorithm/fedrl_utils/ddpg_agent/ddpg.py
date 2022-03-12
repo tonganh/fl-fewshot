@@ -9,6 +9,12 @@ import torch.optim as optim
 from algorithm.fedrl_utils.ddpg_agent.policy import NormalizedActions
 import pickle
 
+
+def transform_action(action):
+    action = action.view(3,-1)
+    return torch.flatten(action[1] * (1 + 1/10 * action[2]))
+
+
 class DDPG_Agent(nn.Module):
     def __init__(
         self,
@@ -82,6 +88,7 @@ class DDPG_Agent(nn.Module):
         state = get_state(models)
         state = torch.DoubleTensor(state).unsqueeze(0).to(self.device)  # current state
         if prev_reward is not None:
+            print("prev_reward", prev_reward)
             self.memory.update(r=prev_reward)
 
         action = self.policy_net.get_action(state)
@@ -90,7 +97,7 @@ class DDPG_Agent(nn.Module):
         # if self.step < self.max_steps:
         if self.memory.get_last_record() is None:
             self.step += 1
-            return action
+            return transform_action(action)
         
         if len(self.replay_buffer) >= self.batch_size:
             self.ddpg_update()
@@ -99,7 +106,7 @@ class DDPG_Agent(nn.Module):
         self.replay_buffer.push(s, a, r, s_next, done)
         self.step += 1
 
-        return action
+        return transform_action(action)
 
 
     def ddpg_update(self, min_value=-np.inf, max_value=np.inf):

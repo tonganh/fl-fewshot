@@ -22,7 +22,7 @@ class Server(BasicServer):
     def __init__(self, option, model, clients, test_data=None):
         super(Server, self).__init__(option, model, clients, test_data)
         self.rival_list = None
-        self.rival_thr = 1
+        self.rival_thr = 0.3
         self.model_list = None
         
     
@@ -45,6 +45,7 @@ class Server(BasicServer):
         self.model_list, train_losses = self.communicate(self.selected_clients)
         
         self.create_rival_list(self.model_list)
+        self.rival_thr = max(self.rival_thr * 1.15, 0.85)
         
         if not self.selected_clients:
             return
@@ -53,6 +54,8 @@ class Server(BasicServer):
 
 
     def aggregate(self, models, p=...):
+        sump = sum(p)
+        p = [pk/sump for pk in p]
         return fmodule._model_sum([model_k * pk for model_k, pk in zip(models, p)])
     
     

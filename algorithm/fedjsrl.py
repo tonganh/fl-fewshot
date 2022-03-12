@@ -41,6 +41,7 @@ class Server(BasicServer):
         }
 
         priority = self.ddpg_agent.get_action(observation, prev_reward=self.prev_reward).tolist()
+        print(priority)
         self.model = self.aggregate(models, p=priority)
         fedrl_test_acc, _ = self.test(model=self.model)
         self.prev_reward = fedrl_test_acc
@@ -54,6 +55,8 @@ class Server(BasicServer):
     
     
     def aggregate(self, models, p=...):
+        sump = sum(p)
+        p = [pk/sump for pk in p]
         return fmodule._model_sum([model_k * pk for model_k, pk in zip(models, p)])
 
 

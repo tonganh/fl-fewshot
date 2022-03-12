@@ -28,6 +28,7 @@ class Server(BasicServer):
             return
         
         impact_factor = self.get_impact_factor(models)
+        print("Impact_factor:", impact_factor)
         self.model = self.aggregate(models, p = impact_factor)
         return
 
@@ -39,13 +40,17 @@ class Server(BasicServer):
                 similarity_matrix[i][j] = compute_similarity(models[i], models[j])
         
         similarity_matrix = 1/similarity_matrix
-        similarity_matrix *= torch.eye(similarity_matrix.shape[0])
         
+        similarity_matrix = torch.nan_to_num(similarity_matrix, nan=0.0)
+        similarity_matrix *= (1- torch.eye(similarity_matrix.shape[0]))
+                
         impact_factor = 1/(similarity_matrix.shape[0]-1) * torch.sum(similarity_matrix, dim=1).flatten()
         return impact_factor.tolist()
     
     
     def aggregate(self, models, p=...):
+        sump = sum(p)
+        p = [pk/sump for pk in p]
         return fmodule._model_sum([model_k * pk for model_k, pk in zip(models, p)])
 
 
