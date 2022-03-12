@@ -1,5 +1,5 @@
 from algorithm.fedbase import BasicServer, BasicClient
-from multiprocessing import Pool as ThreadPool
+from utils import fmodule
 import torch
 import copy
 
@@ -24,26 +24,7 @@ class Server(BasicServer):
         self.rival_list = None
         self.rival_thr = 1
         self.model_list = None
-    
-    
-    def communicate(self, selected_clients):
-        packages_received_from_clients = []
-        if self.num_threads <= 1:
-            # computing iteratively
-            for client_id in selected_clients:
-                response_from_client_id = self.communicate_with(client_id)
-                packages_received_from_clients.append(response_from_client_id)
-        else:
-            # computing in parallel
-            pool = ThreadPool(min(self.num_threads, len(selected_clients)))
-            packages_received_from_clients = pool.map(self.communicate_with, selected_clients)
-            pool.close()
-            pool.join()
-        # count the clients not dropping
-        self.selected_clients = [selected_clients[i] for i in range(len(selected_clients)) if packages_received_from_clients[i]]
-        packages_received_from_clients = [pi for pi in packages_received_from_clients if pi]
-        return self.unpack(packages_received_from_clients)
-    
+        
     
     def communicate_with(self, client_id):
         svr_pkg = self.pack(client_id)
@@ -70,6 +51,10 @@ class Server(BasicServer):
         self.model = self.aggregate(self.model_list, p = [1.0 * self.client_vols[cid]/self.data_vol for cid in self.selected_clients])
         return
 
+
+    def aggregate(self, models, p=...):
+        return fmodule._model_sum([model_k * pk for model_k, pk in zip(models, p)])
+    
     
     def create_rival_list(self, model_list):
         """
@@ -96,7 +81,7 @@ class Server(BasicServer):
     def get_rival_of(self, client_id):
         if self.rival_list:
             i = self.selected_clients.index(client_id)
-            return [self.model_list[j] for j in self.rival_list[i]]
+            return [copy.deepcopy(self.model_list[j]) for j in self.rival_list[i]]
         else:
             return []
     

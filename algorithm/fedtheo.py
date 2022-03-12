@@ -1,5 +1,6 @@
 import torch
 from algorithm.fedbase import BasicServer, BasicClient
+from utils import fmodule
 import numpy as np
 
 
@@ -40,6 +41,10 @@ class Server(BasicServer):
             self.optim_ratio = self.process_insight(insights)
         self.model = self.aggregate(models, p = self.optim_ratio)
         return
+    
+    
+    def aggregate(self, models, p=...):
+        return fmodule._model_sum([model_k * pk for model_k, pk in zip(models, p)])
     
 
     def process_insight(self, insights):

@@ -1,4 +1,5 @@
 from algorithm.fedbase import BasicServer, BasicClient
+from utils import fmodule
 import torch
 
 
@@ -30,6 +31,7 @@ class Server(BasicServer):
         self.model = self.aggregate(models, p = impact_factor)
         return
 
+
     def get_impact_factor(self, models):
         similarity_matrix = torch.zeros([len(models), len(models)])
         for i in range(len(models)):
@@ -41,6 +43,10 @@ class Server(BasicServer):
         
         impact_factor = 1/(similarity_matrix.shape[0]-1) * torch.sum(similarity_matrix, dim=1).flatten()
         return impact_factor.tolist()
+    
+    
+    def aggregate(self, models, p=...):
+        return fmodule._model_sum([model_k * pk for model_k, pk in zip(models, p)])
 
 
 class Client(BasicClient):

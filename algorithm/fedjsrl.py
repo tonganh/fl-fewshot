@@ -1,7 +1,8 @@
 from algorithm.fedbase import BasicServer, BasicClient
+from utils import fmodule
+
 from algorithm.fedrl_utils.ddpg_agent.ddpg import DDPG_Agent
 from datetime import datetime
-import torch
 
 
 class Server(BasicServer):
@@ -50,6 +51,10 @@ class Server(BasicServer):
         super().run()
         self.ddpg_agent.dump_buffer(f"algorithm/fedrl_utils/buffers/{self.buff_folder}", self.buff_file)
         return
+    
+    
+    def aggregate(self, models, p=...):
+        return fmodule._model_sum([model_k * pk for model_k, pk in zip(models, p)])
 
 
 class Client(BasicClient):
