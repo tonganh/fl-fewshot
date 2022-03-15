@@ -66,15 +66,21 @@ class Server(BasicServer):
         
         Note: this threshold must be somewhat decayable
         """
+        models = []
+        for model in model_list:
+            for p, q in zip(model.parameters(), self.model.parameters()):
+                p = p - q
+            models.append(model)
+            
         similarity_matrix = torch.zeros([len(model_list), len(model_list)])
-        for i in range(len(model_list)):
-            for j in range(len(model_list)):
-                similarity_matrix[i][j] = compute_similarity(model_list[i], model_list[j])
+        for i in range(len(models)):
+            for j in range(len(models)):
+                similarity_matrix[i][j] = compute_similarity(models[i], models[j])
         
         self.rival_list = []
-        for i in range(len(model_list)):
+        for i in range(len(models)):
             rival = []
-            for j in range(len(model_list)):
+            for j in range(len(models)):
                 if similarity_matrix[i][j] <= self.rival_thr:
                     rival.append(j)
             self.rival_list.append(rival)
@@ -119,7 +125,7 @@ class Client(BasicClient):
                     for pm, ps in zip(model.parameters(), rival.parameters()):
                         divergence_loss += torch.sum(torch.pow(pm-ps,2))
                 if len(rival_list) > 0:
-                    loss = self.calculator.get_loss(model, batch_data) + 0.05 * 1 / len(rival_list) * divergence_loss
+                    loss = self.calculator.get_loss(model, batch_data) + 0.005 * 1 / len(rival_list) * divergence_loss
                 else:
                     loss = self.calculator.get_loss(model, batch_data)
                 loss.backward()

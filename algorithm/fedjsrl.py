@@ -18,6 +18,7 @@ class Server(BasicServer):
         self.buff_file = dt_string
 
         self.prev_reward = None
+        self.warmup_length = 20
 
 
     def unpack(self, packages_received_from_clients):
@@ -40,11 +41,14 @@ class Server(BasicServer):
             "models": models
         }
 
-        priority = self.ddpg_agent.get_action(observation, prev_reward=self.prev_reward).tolist()
-        print(priority)
-        self.model = self.aggregate(models, p=priority)
-        fedrl_test_acc, _ = self.test(model=self.model)
-        self.prev_reward = fedrl_test_acc
+        if t > self.warmup_length:
+            priority = self.ddpg_agent.get_action(observation, prev_reward=self.prev_reward).tolist()
+            self.model = self.aggregate(models, p=priority)
+            fedrl_test_acc, _ = self.test(model=self.model)
+            self.prev_reward = fedrl_test_acc
+        else:
+            self.model = self.aggregate(models, p = [1.0 * self.client_vols[cid]/self.data_vol for cid in self.selected_clients])
+        
         return
 
     

@@ -33,7 +33,13 @@ class Server(BasicServer):
         return
 
 
-    def get_impact_factor(self, models):
+    def get_impact_factor(self, model_list):
+        models = []
+        for model in model_list:
+            for p, q in zip(model.parameters(), self.model.parameters()):
+                p = p - q
+            models.append(model)
+        
         similarity_matrix = torch.zeros([len(models), len(models)])
         for i in range(len(models)):
             for j in range(len(models)):
