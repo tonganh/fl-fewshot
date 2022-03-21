@@ -16,6 +16,7 @@ AC: the active rate of clients
 # matplotlib.rcParams['pdf.fonttype'] = 42
 # matplotlib.rcParams['ps.fonttype'] = 42
 
+from pathlib import Path
 import matplotlib.pyplot as plt
 import ujson
 import prettytable as pt
@@ -164,7 +165,7 @@ if __name__ == '__main__':
     dicts = read_data_into_dicts(task, records)
 
     # print table
-    print_table(records, dicts)
+    # print_table(records, dicts)
 
     # draw curves
     curve_names = [
@@ -184,4 +185,6 @@ if __name__ == '__main__':
         plt.grid()
         plt.show()
         plt.legend()
-        plt.savefig(f"figures/{task}.{curve}.png")
+        if not Path(f"figures/{task}").exists():
+            os.system(f"mkdir -p figures/{task}")
+        plt.savefig(f"figures/{task}/{curve}.png")
