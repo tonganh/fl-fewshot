@@ -50,7 +50,7 @@ class MPBasicServer(BasicServer):
         # sample clients: MD sampling as default but with replacement=False
         self.selected_clients = self.sample()
         # training
-        models, train_losses = self.communicate(self.selected_clients,pool)
+        models, train_losses = self.communicate(self.selected_clients, pool)
         # check whether all the clients have dropped out, because the dropped clients will be deleted from self.selected_clients
         if not self.selected_clients: return
         # aggregate: pk = 1/K as default where K=len(selected_clients)
