@@ -213,12 +213,11 @@ class BasicServer():
             N = self.num_clients
             return fmodule._model_sum([model_k * pk for model_k, pk in zip(models, p)]) * N / K
         elif self.agg_option == 'uniform':
-            return fmodule._model_average(models)
+            return fmodule._model_average(models, p=p)
         elif self.agg_option == 'weighted_com':
             w = fmodule._model_sum([model_k * pk for model_k, pk in zip(models, p)])
             return (1.0-sum(p))*self.model + w
         else:
-            print("Aggregating with input priorities")
             sump = sum(p)
             p = [pk/sump for pk in p]
             return fmodule._model_sum([model_k * pk for model_k, pk in zip(models, p)])

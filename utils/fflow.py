@@ -10,7 +10,7 @@ import ujson
 import time
 
 sample_list=['uniform', 'md', 'active']
-agg_list=['uniform', 'weighted_scale', 'weighted_com']
+agg_list=['uniform', 'weighted_scale', 'weighted_com', 'none']
 optimizer_list=['SGD', 'Adam']
 
 def read_option():
@@ -22,7 +22,7 @@ def read_option():
 
     # methods of server side for sampling and aggregating
     parser.add_argument('--sample', help='methods for sampling clients', type=str, choices=sample_list, default='uniform')
-    parser.add_argument('--aggregate', help='methods for aggregating models', type=str, choices=agg_list, default='uniform')
+    parser.add_argument('--aggregate', help='methods for aggregating models', type=str, choices=agg_list, default='none')
     parser.add_argument('--learning_rate_decay', help='learning rate decay for the training process;', type=float, default=0.998)
     parser.add_argument('--weight_decay', help='weight decay for the training process', type=float, default=0)
     parser.add_argument('--lr_scheduler', help='type of the global learning rate scheduler', type=int, default=-1)
@@ -39,8 +39,10 @@ def read_option():
     # machine environment settings
     parser.add_argument('--seed', help='seed for random initialization;', type=int, default=0)
     parser.add_argument('--eval_interval', help='evaluate every __ rounds;', type=int, default=1)
-    parser.add_argument('--num_threads_per_gpu', help="the number of threads per gpu in the clients computing session", type=int, default=1)
+    parser.add_argument('--num_threads', help='the number of threads;', type=int, default=1)
+    parser.add_argument('--num_threads_per_gpu', help="the number of threads per gpu in the clients computing session;", type=int, default=1)
     parser.add_argument('--num_gpus', default=3, type=int)
+    parser.add_argument('--gpu', default=0, type=int)
     # the simulating system settings of clients
     
     # constructing the heterogeity of the network

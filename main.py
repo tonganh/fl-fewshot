@@ -19,7 +19,11 @@ class MyLogger(flw.Logger):
                 "client_accs":{},
                 "mean_valid_accs":[],
             }
-        test_metric, test_loss = server.test(device= torch.device('cuda:0'))
+        if "mp_" in server.name:
+            test_metric, test_loss = server.test(device=torch.device('cuda:0'))
+        else:
+            test_metric, test_loss = server.test()
+        
         valid_metrics, valid_losses = server.test_on_clients(self.current_round, 'valid')
         train_metrics, train_losses = server.test_on_clients(self.current_round, 'train')
         self.output['train_losses'].append(1.0*sum([ck * closs for ck, closs in zip(server.client_vols, train_losses)])/server.data_vol)
