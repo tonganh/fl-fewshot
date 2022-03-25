@@ -27,6 +27,11 @@ class Model(FModule):
     def decoder(self, x):
         x = self.fc2(x)
         return x
+    
+    def pred_and_rep(self, x):
+        e = self.encoder(x)
+        o = self.decoder(e)
+        return o, e
 
 class Loss(nn.Module):
     def __init__(self):

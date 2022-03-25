@@ -419,10 +419,10 @@ class ClassifyCalculator(BasicTaskCalculator):
         else:
             return data[0].to(device), data[1].to(device)
 
-    def get_data_loader(self, dataset, batch_size=64, shuffle=True):
+    def get_data_loader(self, dataset, batch_size=64, shuffle=True, droplast=False):
         if self.DataLoader == None:
             raise NotImplementedError("DataLoader Not Found.")
-        return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+        return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=droplast)
 
 class BasicTaskReader:
     def __init__(self, taskpath=''):
