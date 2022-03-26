@@ -1,3 +1,4 @@
+from cmath import isnan
 from pathlib import Path
 from .mp_fedbase import MPBasicServer, MPBasicClient
 import torch.nn as nn
@@ -8,37 +9,38 @@ import os
 import copy
 
 
-def kernel_matrix(input):
-    """
-    input is of shape [batch_size, d]
-    with d is an arbitary number, the dimention of features
-    """
-    # np.savetxt("input.txt", delimiter=',', X=input.cpu().numpy())
-    std = torch.std(input, dim=0)
-    input = input.T.unsqueeze(-1)
-    _ , batch_size, _ = input.shape
-    base_vol = input * torch.ones((batch_size, batch_size))
-    diff_wise = base_vol - base_vol.transpose(1,2)
-    diff_wise_norm = torch.norm(diff_wise, dim=0)
-    # diff_wise_norm /= (2 * torch.mean(std)**2)
-    output = torch.exp(-diff_wise_norm) * (1 - torch.eye(batch_size))
-    return output
-
-
-def proba_matrix(kernel_matrix):
-    """
-    kernel_matrix is the symmetric matrix, output from kernel_matrix function
-    """
-    return kernel_matrix/torch.sum(kernel_matrix, dim=1, keepdim=True)
-
-
-def KL_divergence(proba_matrix_teacher, proba_matrix_student):
+def KL_divergence(teacher_batch_input, student_batch_input, device):
     """
     Compute the KL divergence of 2 proba matrices
     """
-    temp = torch.nan_to_num(proba_matrix_teacher/proba_matrix_student, 1)
-    log_temp = torch.log(temp)
-    return torch.sum(proba_matrix_teacher * log_temp)
+    batch_student, _ = student_batch_input.shape
+    batch_teacher, _ = teacher_batch_input.shape
+    
+    assert batch_teacher == batch_student, "Unmatched batch size"
+    
+    teacher_batch_input = teacher_batch_input.to(device).unsqueeze(1)
+    student_batch_input = student_batch_input.to(device).unsqueeze(1)
+    
+    sub_s = student_batch_input - student_batch_input.transpose(0,1)
+    sub_s_norm = torch.norm(sub_s, dim=2)
+    sub_s_norm = sub_s_norm[sub_s_norm!=0].view(batch_student,-1)
+    std_s = torch.std(sub_s_norm)
+    mean_s = torch.mean(sub_s_norm)
+    kernel_mtx_s = torch.pow(sub_s_norm - mean_s, 2) / (torch.pow(std_s, 2) + 0.001)
+    kernel_mtx_s = torch.exp(-1/2 * kernel_mtx_s)
+    kernel_mtx_s = kernel_mtx_s/torch.sum(kernel_mtx_s, dim=1, keepdim=True)
+    
+    sub_t = teacher_batch_input - teacher_batch_input.transpose(0,1)
+    sub_t_norm = torch.norm(sub_t, dim=2)
+    sub_t_norm = sub_t_norm[sub_t_norm!=0].view(batch_teacher,-1)
+    std_t = torch.std(sub_t_norm)
+    mean_t = torch.mean(sub_t_norm)
+    kernel_mtx_t = torch.pow(sub_t_norm - mean_t, 2) / (torch.pow(std_t, 2) + 0.001)
+    kernel_mtx_t = torch.exp(-1/2 * kernel_mtx_t)
+    kernel_mtx_t = kernel_mtx_t/torch.sum(kernel_mtx_t, dim=1, keepdim=True)
+    
+    kl = torch.sum(kernel_mtx_t * torch.log(kernel_mtx_t/kernel_mtx_s))
+    return kl
 
 
 class Server(MPBasicServer):
@@ -55,8 +57,6 @@ class Server(MPBasicServer):
     def run(self):
         super().run()
         # self.finish(f"algorithm/fedrl_utils/baseline/{self.name}")
-        for i in range(len(self.clients)):
-            self.clients[i].dump_kd_loss(i, f"algorithm/kd_utils/{self.name}")
         return
     
     def iterate(self, t, pool):
@@ -74,35 +74,26 @@ class Client(MPBasicClient):
     def __init__(self, option, name='', train_data=None, valid_data=None):
         super(Client, self).__init__(option, name, train_data, valid_data)
         self.lossfunc = nn.CrossEntropyLoss()
-        self.kd_factor = 0.05
-        self.kd_loss_record = []
-        
+        self.kd_factor = 1
+                
         
     def train(self, model, device):
         model = model.to(device)
         model.train()
         
-        src_model = copy.deepcopy(model)
+        src_model = copy.deepcopy(model).to(device)
         src_model.freeze_grad()
                 
-        data_loader = self.calculator.get_data_loader(self.train_data, batch_size=self.batch_size)
+        data_loader = self.calculator.get_data_loader(self.train_data, batch_size=self.batch_size, droplast=True)
         optimizer = self.calculator.get_optimizer(self.optimizer_name, model, lr = self.learning_rate, weight_decay=self.weight_decay, momentum=self.momentum)
         
-        kd_losses = []
         for iter in range(self.epochs):
-            batch_kl_loss = []
             for batch_id, batch_data in enumerate(data_loader):
                 model.zero_grad()
                 loss, kl_loss = self.get_loss(model, src_model, batch_data, device)
                 loss = loss + kl_loss
                 loss.backward()
                 optimizer.step()
-                batch_kl_loss.append(kl_loss.cpu().item())
-            # print(f"epochs {iter}: kl_loss {np.mean(batch_kl_loss)}")
-            kd_losses.append(np.mean(batch_kl_loss))
-        
-        self.kd_loss_record.append(np.mean(kd_losses))
-        self.kd_factor = min(self.kd_factor * 1.05, 0.25)
         return
     
     
@@ -111,24 +102,9 @@ class Client(MPBasicClient):
 
 
     def get_loss(self, model, src_model, data, device):
-        tdata = self.data_to_device(data, device)
-        output_s, representation_s = model.pred_and_rep(tdata[0])   # Student
-        _ , representation_t = src_model.pred_and_rep(tdata[0])     # Teacher
-        
-        Kx = kernel_matrix(representation_t.detach().cpu())    # Teacher
-        Ky = kernel_matrix(representation_s.detach().cpu())    # Student
-
-        P_t = proba_matrix(Kx)  # Teacher prob
-        Q_s = proba_matrix(Ky)  # Student prob
-
-        kl_loss = KL_divergence(P_t, Q_s)   # KL divergence
+        tdata = self.data_to_device(data, device)    
+        output_s, representation_s = model.pred_and_rep(tdata[0])                  # Student
+        _ , representation_t = src_model.pred_and_rep(tdata[0])                    # Teacher
+        kl_loss = KL_divergence(representation_t, representation_s, device)        # KL divergence
         loss = self.lossfunc(output_s, tdata[1])
-        return loss, self.kd_factor * kl_loss
-    
-    
-    def dump_kd_loss(self, id, folder):
-        if not Path(folder).exists():
-            os.system(f"mkdir -p {folder}")
-            
-        np.savetxt(f"{folder}/kd_loss_{id}.loss", X=np.array(self.kd_loss_record), delimiter=',')
-        return
+        return loss, kl_loss
