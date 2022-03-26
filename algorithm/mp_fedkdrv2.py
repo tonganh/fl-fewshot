@@ -5,49 +5,62 @@ import numpy as np
 import torch
 import os
 import copy
-import timeit
 
 
-def kernel_matrix(input, device):
-    """
-    input is of shape [batch_size, d]
-    with d is an arbitary number, the dimention of features
+def cosine_kernel(input):
+    b, d = input.shape
+    input = input * torch.ones((b,b,d))                     # b x b x d
+    _input = torch.clone(input).transpose(0,1)              # b x b x d but transposed
     
-    return a (batch_size x batch_size) matrix
-    """
-    batch_size, feature_dim = input.shape
+    input_norm = torch.norm(input, dim=2)                   # b x b
+    _input_norm = torch.norm(_input, dim=2)                 # b x b
     
-    # print(input.shape)
-    H = torch.cov(input.T) + torch.eye(feature_dim).to(device) * 0.01
-    # print("H", H.shape)
-    base_vol = input * torch.ones((batch_size, batch_size, 1)).to(device)
-    # print("base vol", base_vol.shape)
-    diff_wise = base_vol - base_vol.transpose(0,1)
-    # print("diff_wise", diff_wise.shape)
-    diff_wise = diff_wise.unsqueeze(-1)
-    # print("diff_wise", diff_wise.shape)
-    H_ = torch.inverse(H)
-    E = diff_wise.transpose(2,3) @ H_ @ diff_wise
-    # print("E", E.shape)
-    K = 1/torch.sqrt(torch.det(H)) * torch.exp(-1/2 * E.squeeze())
-    # print("K", K.shape)
-    return K * (1 - torch.eye(batch_size)).to(device)
+    dot_matrix = torch.sum(input * _input, dim=2)           # b x b
+    
+    cosin_matrix = 1/2 * (dot_matrix / (input_norm * _input_norm) + 1)
+    return cosin_matrix
+    
 
+def KL_cosine_divergence(teacher, student):
+    batch_student, _ = student.shape
+    batch_teacher, _ = teacher.shape
+    
+    assert batch_teacher == batch_student, "Unmatched batch size"
+    
+    student_dis = cosine_kernel(student) * (1 - torch.eye(batch_student))
+    teacher_dis = cosine_kernel(teacher) * (1 - torch.eye(batch_student))
 
-def proba_matrix(kernel_matrix):
-    """
-    kernel_matrix is the symmetric matrix, output from kernel_matrix function
-    """
-    return kernel_matrix/torch.sum(kernel_matrix, dim=1, keepdim=True)
-
-
-def KL_divergence(proba_matrix_teacher, proba_matrix_student):
-    """
-    Compute the KL divergence of 2 proba matrices
-    """
-    temp = torch.nan_to_num(proba_matrix_teacher/proba_matrix_student, 1)
+    temp = torch.nan_to_num(teacher_dis/student_dis, 1)
     log_temp = torch.log(temp)
-    return torch.sum(proba_matrix_teacher * log_temp)
+    
+    return torch.sum(teacher_dis * log_temp)
+
+
+def KL_loss_compute(target, input):
+    """
+    Compute KL on Similarity Kernel applied matrices
+    target: N x d
+    input:  N x c
+    @author: Anh Duy
+    """
+    dot_inp = input @ input.T
+    norm_inp = torch.norm(input, dim=1)
+    norm_mtx_inp = torch.matmul(norm_inp.unsqueeze(1), norm_inp.unsqueeze(0))
+    cosine_inp = dot_inp / norm_mtx_inp
+    cosine_inp = 1/2 * (cosine_inp + 1)
+    cosine_inp = cosine_inp / torch.sum(cosine_inp, dim = 1)
+    
+    dot_tar = target @ target.T
+    norm_tar = torch.norm(target, dim=1)
+    norm_mtx_tar = torch.matmul(norm_tar.unsqueeze(1), norm_tar.unsqueeze(0))
+    cosine_tar = dot_tar / norm_mtx_tar
+    cosine_tar = 1/2 * (cosine_tar + 1)
+    cosine_tar = cosine_tar / torch.sum(cosine_tar, dim = 1)
+    
+    losses = cosine_tar * torch.log(cosine_tar / cosine_inp)
+    loss = torch.sum(losses)
+    
+    return loss
 
 
 class Server(MPBasicServer):
@@ -84,7 +97,6 @@ class Client(MPBasicClient):
         super(Client, self).__init__(option, name, train_data, valid_data)
         self.lossfunc = nn.CrossEntropyLoss()
         self.kd_factor = 0.05
-        self.kd_loss_record = []
         
         
     def train(self, model, device):
@@ -104,7 +116,6 @@ class Client(MPBasicClient):
         data_loader = self.calculator.get_data_loader(self.train_data, batch_size=self.batch_size)
         optimizer = self.calculator.get_optimizer(self.optimizer_name, model, lr = self.learning_rate, weight_decay=self.weight_decay, momentum=self.momentum)
         
-        start = timeit.timeit()
         for iter in range(self.epochs):
             for batch_id, batch_data in enumerate(data_loader):
                 model.zero_grad()
@@ -112,8 +123,6 @@ class Client(MPBasicClient):
                 loss.backward()
                 optimizer.step()
                 
-        end = timeit.timeit()
-        print("Done training this client after", end - start, "s")
         self.kd_factor = min(self.kd_factor * 1.05, 0.25)
         return
     
@@ -126,23 +135,11 @@ class Client(MPBasicClient):
         tdata = self.data_to_device(data, device)
         output_s, representation_s = model.pred_and_rep(tdata[0])   # Student
         _ , representation_t = src_model.pred_and_rep(tdata[0])     # Teacher
-        
-        Kx = kernel_matrix(representation_t, device)    # Teacher
-        Ky = kernel_matrix(representation_s, device)    # Student
 
-        P_t = proba_matrix(Kx)
-        Q_s = proba_matrix(Ky)
+        P_t = representation_t
+        Q_s = representation_s
 
-        kl_loss = KL_divergence(P_t, Q_s)
-
+        kl_loss = KL_loss_compute(P_t, Q_s)
         loss = self.lossfunc(output_s, tdata[1])
-        return loss + self.kd_factor * kl_loss
-    
-    
-    def dump_kd_loss(self, id, folder):
-        if not Path(folder).exists():
-            os.system(f"mkdir -p {folder}")
         
-        with open(f"{folder}/kd_loss_{id}.loss", "w") as file:
-            for loss in self.kd_loss_record:
-                file.write(f"{loss}\n")
+        return loss + self.kd_factor * kl_loss
