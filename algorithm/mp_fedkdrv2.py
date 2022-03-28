@@ -6,56 +6,30 @@ import torch
 import os
 import copy
 
-
-def cosine_kernel(input):
-    b, d = input.shape
-    input = input * torch.ones((b,b,d))                     # b x b x d
-    _input = torch.clone(input).transpose(0,1)              # b x b x d but transposed
-    
-    input_norm = torch.norm(input, dim=2)                   # b x b
-    _input_norm = torch.norm(_input, dim=2)                 # b x b
-    
-    dot_matrix = torch.sum(input * _input, dim=2)           # b x b
-    
-    cosin_matrix = 1/2 * (dot_matrix / (input_norm * _input_norm) + 1)
-    return cosin_matrix
-    
-
-def KL_cosine_divergence(teacher, student):
-    batch_student, _ = student.shape
-    batch_teacher, _ = teacher.shape
-    
-    assert batch_teacher == batch_student, "Unmatched batch size"
-    
-    student_dis = cosine_kernel(student) * (1 - torch.eye(batch_student))
-    teacher_dis = cosine_kernel(teacher) * (1 - torch.eye(batch_student))
-
-    temp = torch.nan_to_num(teacher_dis/student_dis, 1)
-    log_temp = torch.log(temp)
-    
-    return torch.sum(teacher_dis * log_temp)
-
-
 def KL_loss_compute(target, input):
     """
     Compute KL on Similarity Kernel applied matrices
     target: N x d
     input:  N x c
-    @author: Anh Duy
+    Author: Anh Duy ft. Nguyen Nang Hung
     """
     dot_inp = input @ input.T
     norm_inp = torch.norm(input, dim=1)
     norm_mtx_inp = torch.matmul(norm_inp.unsqueeze(1), norm_inp.unsqueeze(0))
     cosine_inp = dot_inp / norm_mtx_inp
+    cosine_inp = cosine_inp - torch.diag(torch.diagonal(cosine_inp))
+    cosine_inp = cosine_inp[cosine_inp!=0].view(input.shape[0], -1)
     cosine_inp = 1/2 * (cosine_inp + 1)
-    cosine_inp = cosine_inp / torch.sum(cosine_inp, dim = 1)
+    cosine_inp = cosine_inp / torch.sum(cosine_inp, dim = 1, keepdim=True)
     
     dot_tar = target @ target.T
     norm_tar = torch.norm(target, dim=1)
     norm_mtx_tar = torch.matmul(norm_tar.unsqueeze(1), norm_tar.unsqueeze(0))
     cosine_tar = dot_tar / norm_mtx_tar
+    cosine_tar = cosine_tar - torch.diag(torch.diagonal(cosine_tar))
+    cosine_tar = cosine_tar[cosine_tar!= 0].view(target.shape[0], -1)
     cosine_tar = 1/2 * (cosine_tar + 1)
-    cosine_tar = cosine_tar / torch.sum(cosine_tar, dim = 1)
+    cosine_tar = cosine_tar / torch.sum(cosine_tar, dim = 1, keepdim=True)
     
     losses = cosine_tar * torch.log(cosine_tar / cosine_inp)
     loss = torch.sum(losses)
@@ -66,19 +40,10 @@ def KL_loss_compute(target, input):
 class Server(MPBasicServer):
     def __init__(self, option, model, clients, test_data = None):
         super(Server, self).__init__(option, model, clients, test_data)
-        
-    def finish(self, model_path):
-        if not Path(model_path).exists():
-            os.system(f"mkdir -p {model_path}")
-        task = self.option['task']
-        torch.save(self.model.state_dict(), f"{model_path}/{self.name}_{self.num_rounds}_{task}.pth")
-        pass
+
     
     def run(self):
         super().run()
-        # self.finish(f"algorithm/fedrl_utils/baseline/{self.name}")
-        # for i in range(len(self.clients)):
-        #     self.clients[i].dump_kd_loss(i, f"algorithm/kd_utils/{self.name}")
         return
     
     def iterate(self, t, pool):
@@ -96,7 +61,6 @@ class Client(MPBasicClient):
     def __init__(self, option, name='', train_data=None, valid_data=None):
         super(Client, self).__init__(option, name, train_data, valid_data)
         self.lossfunc = nn.CrossEntropyLoss()
-        self.kd_factor = 0.05
         
         
     def train(self, model, device):
@@ -122,8 +86,6 @@ class Client(MPBasicClient):
                 loss = self.get_loss(model, src_model, batch_data, device)
                 loss.backward()
                 optimizer.step()
-                
-        self.kd_factor = min(self.kd_factor * 1.05, 0.25)
         return
     
     
@@ -142,4 +104,4 @@ class Client(MPBasicClient):
         kl_loss = KL_loss_compute(P_t, Q_s)
         loss = self.lossfunc(output_s, tdata[1])
         
-        return loss + self.kd_factor * kl_loss
+        return loss + kl_loss

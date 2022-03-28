@@ -11,7 +11,14 @@ import copy
 
 def KL_divergence(teacher_batch_input, student_batch_input, device):
     """
-    Compute the KL divergence of 2 proba matrices
+    Compute the KL divergence of 2 batches of layers
+    Args:
+        teacher_batch_input: Size N x d
+        student_batch_input: Size N x c
+    
+    Method: Kernel Density Estimation (KDE)
+    Kernel: Gaussian
+    Author: Nguyen Nang Hung
     """
     batch_student, _ = student_batch_input.shape
     batch_teacher, _ = teacher_batch_input.shape

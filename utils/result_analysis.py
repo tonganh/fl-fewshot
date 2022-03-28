@@ -19,9 +19,14 @@ AC: the active rate of clients
 from pathlib import Path
 import matplotlib.pyplot as plt
 import ujson
-import prettytable as pt
+# import prettytable as pt
 import os
 import numpy as np
+
+
+linestyle_tuple = [
+'-', '--', '-.', ':', 'dashed', 'dashdot', 'dotted', 'solid',
+]
 
 def read_data_into_dicts(task, records):
     path = '../fedtask/'+task+'/record'
@@ -49,7 +54,7 @@ def draw_curve(dicts, curve='train_losses', legends = [], final_round = -1):
             y = [dict[curve][round] for round in range(num_rounds + 1) if (round == 0 or round % eval_interval == 0 or round == num_rounds)]
         else:
             y = dict[curve]
-        plt.plot(x, y, label=legends[i], linewidth=1)
+        plt.plot(x, y, label=legends[i], linewidth=1, linestyle=linestyle_tuple[i%len(linestyle_tuple)])
         if final_round>0: plt.xlim((0, final_round))
     plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=1)
     return
@@ -67,21 +72,21 @@ def filename_filter(fnames=[], filter={}):
             fnames = [f for f in fnames if eval(f[f.find('_'+key)+len(key)+1:f.find('_',f.find(key)+1)]+' '+con)]
     return fnames
 
-def round_to_achieve_test_acc(records, dicts, target=0):
-    tb= pt.PrettyTable()
-    tb.field_names = [
-        'Record',
-        'Round to Achieve {}% Test-Acc.'.format(target),
-    ]
-    for rec, d in zip(records, dicts):
-        r = -1
-        for i in range(len(d['test_accs'])):
-            if d['test_accs'][i]>=target-0.000001:
-                r = i*d['meta']['eval_interval']
-                break
-        tb.add_row([rec, r])
-    print(tb)
-    return
+# def round_to_achieve_test_acc(records, dicts, target=0):
+#     tb= pt.PrettyTable()
+#     tb.field_names = [
+#         'Record',
+#         'Round to Achieve {}% Test-Acc.'.format(target),
+#     ]
+#     for rec, d in zip(records, dicts):
+#         r = -1
+#         for i in range(len(d['test_accs'])):
+#             if d['test_accs'][i]>=target-0.000001:
+#                 r = i*d['meta']['eval_interval']
+#                 break
+#         tb.add_row([rec, r])
+#     print(tb)
+#     return
 
 def scan_records(task, header = '', filter = {}):
     path = '../fedtask/' + task + '/record'
@@ -90,39 +95,39 @@ def scan_records(task, header = '', filter = {}):
     files = [f for f in files if f.startswith(header+'_')]
     return filename_filter(files, filter)
 
-def print_table(records, dicts):
-    tb = pt.PrettyTable()
-    tb.field_names = [
-        'Record',
-        'Test-Acc.',
-        'Valid-Acc.',
-        'Train-Loss',
-        'Test-Loss',
-        'Best Test-Acc./Round',
-        'Highest Valid-Acc.',
-        'Lowest Valid-Acc.',
-        'Mean-Valid-Acc.',
-        'Var-Valid-Acc.',
-    ]
-    for rec,d in zip(records, dicts):
-        testacc  = d['test_accs'][-1]
-        validacc = d['mean_curve'][-1]
-        trainloss = d['train_losses'][-1]
-        testloss = d['test_losses'][-1]
-        bestacc = 0
-        idx = -1
-        for i in range(len(d['test_accs'])):
-            if d['test_accs'][i]>bestacc:
-                bestacc = d['test_accs'][i]
-                idx = i*d['meta']['eval_interval']
-        highest = float(np.max(d['valid_accs'][-1]))
-        lowest = float(np.min(d['valid_accs'][-1]))
-        mean_valid = float(np.mean(d['valid_accs'][-1]))
-        var_valid = float(np.std(d['valid_accs'][-1]))
-        tb.add_row([rec, testacc, validacc, trainloss, testloss, str(bestacc)+'/'+str(idx), highest, lowest, mean_valid, var_valid])
-    tb.sortby = 'Test-Acc.'
-    tb.reversesort = True
-    print(tb)
+# def print_table(records, dicts):
+#     tb = pt.PrettyTable()
+#     tb.field_names = [
+#         'Record',
+#         'Test-Acc.',
+#         'Valid-Acc.',
+#         'Train-Loss',
+#         'Test-Loss',
+#         'Best Test-Acc./Round',
+#         'Highest Valid-Acc.',
+#         'Lowest Valid-Acc.',
+#         'Mean-Valid-Acc.',
+#         'Var-Valid-Acc.',
+#     ]
+#     for rec,d in zip(records, dicts):
+#         testacc  = d['test_accs'][-1]
+#         validacc = d['mean_curve'][-1]
+#         trainloss = d['train_losses'][-1]
+#         testloss = d['test_losses'][-1]
+#         bestacc = 0
+#         idx = -1
+#         for i in range(len(d['test_accs'])):
+#             if d['test_accs'][i]>bestacc:
+#                 bestacc = d['test_accs'][i]
+#                 idx = i*d['meta']['eval_interval']
+#         highest = float(np.max(d['valid_accs'][-1]))
+#         lowest = float(np.min(d['valid_accs'][-1]))
+#         mean_valid = float(np.mean(d['valid_accs'][-1]))
+#         var_valid = float(np.std(d['valid_accs'][-1]))
+#         tb.add_row([rec, testacc, validacc, trainloss, testloss, str(bestacc)+'/'+str(idx), highest, lowest, mean_valid, var_valid])
+#     tb.sortby = 'Test-Acc.'
+#     tb.reversesort = True
+#     print(tb)
 
 def get_key_from_filename(record, key = ''):
     if key=='': return ''
@@ -141,21 +146,8 @@ def create_legend(records=[], keys=[]):
         res.append(" ".join(s))
     return res
 
-if __name__ == '__main__':
-    # task+record
-    task = 'mnist_cnum100_dist0_skew0_seed0'
-    headers = [
-        'fedavg',
-        'fedrl',
-    ]
-    flt = {
-        # 'E': '5',
-        # 'B': '10',
-        # 'LR': '0.01',
-        # 'R': '30',
-        # 'P': '0.01',
-        # 'S': '0',
-    }
+
+def main_func(task, headers, flt):
     # read and filter the filenames
     records = set()
     for h in headers:
@@ -188,3 +180,32 @@ if __name__ == '__main__':
         if not Path(f"figures/{task}").exists():
             os.system(f"mkdir -p figures/{task}")
         plt.savefig(f"figures/{task}/{curve}.png")
+        
+        
+if __name__ == '__main__':
+    # task+record
+    headers = [
+        'mp_fedavg',
+        'fedavg',
+        'fedprox',
+        'mp_fedkdr',
+        'mp_fedkdrv2',
+        'fedfa',
+        'fedfv',
+        'scaffold'
+    ]
+    flt = {
+        # 'E': '5',
+        # 'B': '10',
+        # 'LR': '0.01',
+        'R': '50',
+        # 'P': '0.01',
+        # 'S': '0',
+    }
+    
+    for s in [0.2,0.4,0.6,0.8]:
+        task = f'mnist_cnum100_dist1_skew{s}_seed0'
+        try:
+            main_func(task, headers, flt)
+        except ValueError:
+            print("error:", task)
