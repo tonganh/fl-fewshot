@@ -9,6 +9,13 @@ class Server(BasicServer):
         self.paras_name = ['alpha']
         self.alpha = option['alpha']
         self.h  = self.model.zeros_like()
+        
+    def iterate(self, t):
+        self.selected_clients = self.sample()
+        models, train_losses = self.communicate(self.selected_clients)
+        if not self.selected_clients: return
+        self.model = self.aggregate(models)
+        return
 
     def aggregate(self, models):
         self.h = self.h - self.alpha * (1.0 / self.num_clients * fmodule._model_sum(models) - self.model)
