@@ -54,8 +54,9 @@ class BasicServer:
             self.global_lr_scheduler(round)
 
             logger.time_end("Time Cost")
-            if logger.check_if_log(round, self.eval_interval):
-                logger.log(self)
+            # if logger.check_if_log(round, self.eval_interval):
+            #     logger.log(self)
+            #     breakpoint()
 
         print("=================End==================")
         logger.time_end("Total Time Cost")

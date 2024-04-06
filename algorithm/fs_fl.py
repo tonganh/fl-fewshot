@@ -13,7 +13,7 @@ class Server(BasicServer):
 
     def iterate(self, t):
         self.selected_clients = self.sample()
-        self.selected_clients = [0]
+        # self.selected_clients = [0]
 
         data = self.communicate(self.selected_clients)
 
@@ -21,7 +21,6 @@ class Server(BasicServer):
             return
 
         self.aggregate(data)
-
 
     def aggregate(self, data):
         # aggregate model
@@ -42,11 +41,11 @@ class Server(BasicServer):
                         num_clients[cls_id] = 0
                     cls_protos[cls_id] += local_protos[cls_id]
                     num_clients[cls_id] += 1
-        
+
         for cls_id in cls_protos:
             cls_protos[cls_id] /= num_clients[cls_id]
             self.cls_protos[cls_id] = cls_protos[cls_id]
-    
+
     def pack(self, client_id):
         pkg = {"model": copy.deepcopy(self.model), "cls_protos": None}
         if self.cls_protos is not None:
@@ -83,8 +82,6 @@ class Client(BasicClient):
         }
         self.iter_per_round = option["num_train_steps"]
 
-        
-
     def reply(self, svr_pkg):
 
         model, cls_protos = self.unpack(svr_pkg)
@@ -92,9 +89,8 @@ class Client(BasicClient):
         self.train(model, cls_protos)
 
         cls_protos = {}
-        if self.option['prototype_loss_weight'] > 0:
+        if self.option["prototype_loss_weight"] > 0:
             cls_protos = self.compute_class_prototypes(model)
-
 
         train_loss, train_acc = self.eval(model, "train")
         test_loss, test_acc = self.eval(model, "test")
@@ -116,7 +112,7 @@ class Client(BasicClient):
             if isinstance(input[key], torch.Tensor):
                 input[key] = input[key].to(fmodule.device)
                 input[key] = input[key].squeeze(0)
-        input['query_labels'] = input['query_labels'].to(dtype=torch.long)
+        input["query_labels"] = input["query_labels"].to(dtype=torch.long)
         return input
 
     def eval(self, model, mode="test"):
@@ -140,18 +136,19 @@ class Client(BasicClient):
 
                 output = model(input)
 
-                loss = self.compute_loss(output['logits'], input['query_labels'])
+                loss = self.compute_loss(output["logits"], input["query_labels"])
 
                 total_loss += loss.item()
-                total_correct += (output['logits'].argmax(1) == input['query_labels']).sum().item()
-                total_num += len(input['query_labels'])
+                total_correct += (
+                    (output["logits"].argmax(1) == input["query_labels"]).sum().item()
+                )
+                total_num += len(input["query_labels"])
 
             return total_loss / total_num, total_correct / total_num
 
     def train(self, model, global_protos):
         optimizer = self.calculator.get_optimizer(model=model, **self.optimizer_cfg)
         gradient_accumulation_steps = 4
-
         model.train()
         optimizer.zero_grad()
 
@@ -166,9 +163,9 @@ class Client(BasicClient):
                 input = next(self.train_loader_iter)
 
             input = self.prepare_input(input)
-            
+
             output = model(input)
-            
+
             loss = self.compute_loss(
                 output["logits"],
                 input["query_labels"],

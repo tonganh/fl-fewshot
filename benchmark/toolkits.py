@@ -739,7 +739,16 @@ def get_random_n_values_from_array(array, n):
 
 
 class XYDatasetFewShot(Dataset):
-    def __init__(self, data_repo, sample_ids, sample_labels, num_way=5, num_shot=5, num_query=5, totensor=True):
+    def __init__(
+        self,
+        data_repo,
+        sample_ids,
+        sample_labels,
+        num_way=5,
+        num_shot=5,
+        num_query=5,
+        totensor=True,
+    ):
         """Init Dataset with pairs of features and labels/annotations.
         XYDataset transforms data that is list\array into tensor.
         The data is already loaded into memory before passing into XYDataset.__init__()
@@ -752,7 +761,11 @@ class XYDatasetFewShot(Dataset):
         self.all_labels = list(set(sample_labels))
         self.cls_samples = {}
         for cls_id in self.all_labels:
-            self.cls_samples[cls_id] = [sample_ids[i] for i in range(len(sample_ids)) if sample_labels[i] == cls_id]
+            self.cls_samples[cls_id] = [
+                sample_ids[i]
+                for i in range(len(sample_ids))
+                if sample_labels[i] == cls_id
+            ]
         self.num_way = num_way
         self.num_shot = num_shot
         self.num_query = num_query
@@ -786,10 +799,12 @@ class XYDatasetFewShot(Dataset):
         query_set = []
         query_labels = []
         for it, cls_id in enumerate(sampled_labels):
-            sampled_data_ids = random.sample(self.cls_samples[cls_id], self.num_shot+self.num_query)
+            sampled_data_ids = random.sample(
+                self.cls_samples[cls_id], self.num_shot + self.num_query
+            )
             sampled_data = [self.data_repo[i][0] for i in sampled_data_ids]
-            support_set += sampled_data[:self.num_shot]
-            query_set += sampled_data[self.num_shot:]
+            support_set += sampled_data[: self.num_shot]
+            query_set += sampled_data[self.num_shot :]
             support_labels += [it] * self.num_shot
             query_labels += [it] * self.num_query
         # return self.X[item], self.Y[item]
@@ -817,10 +832,9 @@ class XYDatasetFewShot(Dataset):
         return self.all_labels
 
     def get_samples_by_cls(self, cls_id):
-        data = [self.data_repo[i][0] for i in self.cls_samples[cls_id]] 
+        data = [self.data_repo[i][0] for i in self.cls_samples[cls_id]]
         data = torch.stack(data)
         return data
-
 
 
 class IDXDataset(Dataset):
