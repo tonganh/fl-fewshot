@@ -1,7 +1,8 @@
 from torchvision import datasets, transforms
-from benchmark.toolkits import ClassifyCalculator, DefaultTaskGen, XYTaskReader
+from benchmark.toolkits import ClassifyCalculator, DefaultTaskGen, XYDatasetFewShot, XYTaskReader
 from torch.utils.data import DataLoader
 import numpy as np
+from torch.utils.data import ConcatDataset
 
 
 # def iid_partition(generator):
@@ -75,12 +76,60 @@ class TaskGen(DefaultTaskGen):
         self.train_data = {"x": train_x, "y": train_y}
         self.test_data = {"x": test_x, "y": test_y}
         return
+    
 
+import json
 
 class TaskReader(XYTaskReader):
-    def __init__(self, taskpath=""):
-        super(TaskReader, self).__init__(taskpath)
-        self.DataLoader = DataLoader
+    def __init__(self, data_path, data_split_path):
+        train_data = datasets.CIFAR100(
+            data_path,
+            train=True,
+            download=False,
+            transform=transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
+                    ),
+                ]
+            ),
+        )
+        test_data = datasets.CIFAR100(
+            data_path,
+            train=False,
+            download=False,
+            transform=transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
+                    ),
+                ]
+            ),
+        )
+        dataset = ConcatDataset([train_data, test_data])
+        self.dataset = dataset
+        self.data_split_path = data_split_path
+
+
+    def read_data(self):
+        with open(self.data_split_path, "r") as f:
+            client_data = json.load(f)
+        
+        client_names = range(len(client_data))
+        train_datas = [
+            XYDatasetFewShot(self.dataset, client_data[i]['train'], client_data[i]['train_labels'])
+            for i in client_names]
+        test_datas = [
+            XYDatasetFewShot(self.dataset, client_data[i]['test'], client_data[i]['test_labels'])
+            for i in client_names]
+        
+        return train_datas, None, test_datas, client_names
+
+
+    
+
 
 
 class TaskCalculator(ClassifyCalculator):

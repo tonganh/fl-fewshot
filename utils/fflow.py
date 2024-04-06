@@ -8,6 +8,7 @@ import os
 import utils.fmodule
 import ujson
 import time
+import json
 
 sample_list=['uniform', 'md', 'active']
 agg_list=['uniform', 'weighted_scale', 'weighted_com', 'none']
@@ -19,7 +20,9 @@ def read_option():
     parser.add_argument('--task', help='name of fedtask;', type=str, default='mnist_cnum100_dist0_skew0_seed0')
     parser.add_argument('--algorithm', help='name of algorithm;', type=str, default='fedavg')
     parser.add_argument('--model', help='name of model;', type=str, default='cnn')
-
+    parser.add_argument('--data_split', help='path to client data split', type=str, default=None)
+    parser.add_argument('--root_data', help='path to folder contain torch vision cifar 100 dataset', type=str, default=None)
+    parser.add_argument('--prototype_loss_weight', help='weights for prototype loss', type=float, default=0)
     # methods of server side for sampling and aggregating
     parser.add_argument('--sample', help='methods for sampling clients', type=str, choices=sample_list, default='uniform')
     parser.add_argument('--aggregate', help='methods for aggregating models', type=str, choices=agg_list, default='none')
@@ -35,6 +38,11 @@ def read_option():
     parser.add_argument('--batch_size', help='batch size when clients trainset on data;', type=int, default=64)
     parser.add_argument('--optimizer', help='select the optimizer for gd', type=str, choices=optimizer_list, default='SGD')
     parser.add_argument('--momentum', help='momentum of local update', type=float, default=0)
+    parser.add_argument('--num_train_steps', help='number of train step on client', type=int, default=200)
+    parser.add_argument('--num_val_steps', help='number of val step on client', type=int, default=100)
+
+    parser.add_argument('--num_loader_workers', help='number of worker for client data loader', type=int, default=1)
+
 
     # machine environment settings
     parser.add_argument('--seed', help='seed for random initialization;', type=int, default=0)
@@ -87,11 +95,17 @@ def initialize(option):
     utils.fmodule.TaskCalculator = getattr(importlib.import_module(bmk_core_path), 'TaskCalculator')
     utils.fmodule.TaskCalculator.setOP(getattr(importlib.import_module('torch.optim'), option['optimizer']))
     utils.fmodule.Model = getattr(importlib.import_module(bmk_model_path), 'Model')
-    task_reader = getattr(importlib.import_module(bmk_core_path), 'TaskReader')(taskpath=os.path.join('fedtask', option['task']))
+    # task_reader = getattr(importlib.import_module(bmk_core_path), 'TaskReader')(taskpath=os.path.join('fedtask', option['task']))
+    task_reader = getattr(importlib.import_module(bmk_core_path), 'TaskReader')
+
+    if option['data_split'] != None:
+        task_reader = task_reader(data_path=option['root_data'], data_split_path=option['data_split'])
+    else:
+        task_reader = task_reader(taskpath=os.path.join('fedtask', option['task']))
     train_datas, valid_datas, test_data, client_names = task_reader.read_data()
+    valid_datas = test_data
     num_clients = len(client_names)
     print("done")
-
     # init client
     print('init clients...', end='')
     client_path = '%s.%s' % ('algorithm', option['algorithm'])
@@ -102,7 +116,7 @@ def initialize(option):
     # init server
     print("init server...", end='')
     server_path = '%s.%s' % ('algorithm', option['algorithm'])
-    server = getattr(importlib.import_module(server_path), 'Server')(option, utils.fmodule.Model().to(utils.fmodule.device), clients, test_data = test_data)
+    server = getattr(importlib.import_module(server_path), 'Server')(option, utils.fmodule.Model().to(utils.fmodule.device), clients)
     print('done')
     return server
 

@@ -615,7 +615,6 @@ class ClassifyCalculator(BasicTaskCalculator):
 
     def data_to_device(self, data, device=None):
         if device is None:
-            breakpoint()
             return data[0].to(self.device), data[1].to(self.device)
         else:
             return data[0].to(device), data[1].to(device)
@@ -740,7 +739,7 @@ def get_random_n_values_from_array(array, n):
 
 
 class XYDatasetFewShot(Dataset):
-    def __init__(self, X=[], Y=[], totensor=True):
+    def __init__(self, data_repo, sample_ids, sample_labels, num_way=5, num_shot=5, num_query=5, totensor=True):
         """Init Dataset with pairs of features and labels/annotations.
         XYDataset transforms data that is list\array into tensor.
         The data is already loaded into memory before passing into XYDataset.__init__()
@@ -749,18 +748,14 @@ class XYDatasetFewShot(Dataset):
             X: a list of features
             Y: a list of labels with the same length of X
         """
-        if not self._check_equal_length(X, Y):
-            raise RuntimeError("Different length of Y with X.")
-        if totensor:
-            try:
-                self.X = torch.tensor(X)
-                self.Y = torch.tensor(Y)
-            except:
-                raise RuntimeError("Failed to convert input into torch.Tensor.")
-        else:
-            self.X = X
-            self.Y = Y
-        self.all_labels = list(set(self.tolist()[1]))
+        self.data_repo = data_repo
+        self.all_labels = list(set(sample_labels))
+        self.cls_samples = {}
+        for cls_id in self.all_labels:
+            self.cls_samples[cls_id] = [sample_ids[i] for i in range(len(sample_ids)) if sample_labels[i] == cls_id]
+        self.num_way = num_way
+        self.num_shot = num_shot
+        self.num_query = num_query
 
     def __len__(self):
         # return len(self.Y)
@@ -784,31 +779,26 @@ class XYDatasetFewShot(Dataset):
         return X_samples, Y_samples
 
     def __getitem__(self, item):
-        NUMBER_LABEL_GET_RANDOM = 5
-        labels_sample = get_random_n_values_from_array(
-            self.all_labels, NUMBER_LABEL_GET_RANDOM
-        )
-        X_support_set, Y_support_set = self._get_X_Y_support_query(labels_sample)
-        unique_class_support_set = labels_sample
-        support_set = {
-            "x": X_support_set,
-            "y": Y_support_set,
-            "class_ids": labels_sample,
-        }
-        X_query_set, Y_query_set = self._get_X_Y_support_query(labels_sample)
-        unique_class_query = labels_sample
-        query_set = {
-            "X_query_set": X_query_set,
-            "Y_query_set": Y_query_set,
-            "class_ids": labels_sample,
-        }
+        n_way = min(len(self.all_labels), self.num_way)
+        sampled_labels = random.sample(self.all_labels, n_way)
+        support_set = []
+        support_labels = []
+        query_set = []
+        query_labels = []
+        for it, cls_id in enumerate(sampled_labels):
+            sampled_data_ids = random.sample(self.cls_samples[cls_id], self.num_shot+self.num_query)
+            sampled_data = [self.data_repo[i][0] for i in sampled_data_ids]
+            support_set += sampled_data[:self.num_shot]
+            query_set += sampled_data[self.num_shot:]
+            support_labels += [it] * self.num_shot
+            query_labels += [it] * self.num_query
         # return self.X[item], self.Y[item]
         result = {
-            "X_support_set": X_support_set,
-            "Y_support_set": Y_support_set,
-            "X_query_set": X_query_set,
-            "Y_query_set": Y_query_set,
-            "class_ids": labels_sample,
+            "support_set": torch.stack(support_set),
+            "query_set": torch.stack(query_set),
+            "support_labels": torch.tensor(support_labels),
+            "query_labels": torch.tensor(query_labels),
+            "class_ids": torch.tensor(sampled_labels),
         }
         return result
 
@@ -822,6 +812,15 @@ class XYDatasetFewShot(Dataset):
 
     def get_all_labels(self):
         return self.all_labels
+
+    def get_unique_classes(self):
+        return self.all_labels
+
+    def get_samples_by_cls(self, cls_id):
+        data = [self.data_repo[i][0] for i in self.cls_samples[cls_id]] 
+        data = torch.stack(data)
+        return data
+
 
 
 class IDXDataset(Dataset):

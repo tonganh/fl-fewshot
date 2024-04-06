@@ -11,3 +11,5 @@
 /utils/figures/
 *.txt
 test*
+split_seen.log
+split_unseen.log
