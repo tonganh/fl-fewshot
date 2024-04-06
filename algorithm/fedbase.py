@@ -5,6 +5,7 @@ from multiprocessing import Pool as ThreadPool
 from main import logger
 import os
 import utils.fflow as flw
+from concurrent.futures import ThreadPoolExecutor
 
 
 class BasicServer:
@@ -111,12 +112,14 @@ class BasicServer:
                 packages_received_from_clients.append(response_from_client_id)
         else:
             # computing in parallel
-            pool = ThreadPool(min(self.num_threads, len(selected_clients)))
-            packages_received_from_clients = pool.map(
-                self.communicate_with, selected_clients
-            )
-            pool.close()
-            pool.join()
+            with ThreadPoolExecutor(min(self.num_threads, len(selected_clients))) as executor:
+                packages_received_from_clients = list(executor.map(self.communicate_with, selected_clients))
+            # pool = ThreadPool(min(self.num_threads, len(selected_clients)))
+            # packages_received_from_clients = pool.map(
+            #     self.communicate_with, selected_clients
+            # )
+            # pool.close()
+            # pool.join()
         # count the clients not dropping
         self.selected_clients = [
             selected_clients[i]
