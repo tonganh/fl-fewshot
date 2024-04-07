@@ -26,6 +26,7 @@ def read_option():
     parser.add_argument('--prototype_loss_weight', help='weights for prototype loss', type=float, default=0)
     parser.add_argument('--use_wandb_logging', help='use wandb logging', action='store_true', default=False)
     parser.add_argument('--log_dir', help='', type=str, default='logs')
+    parser.add_argument('--debug', action='store_true', default=False)
 
     
     # methods of server side for sampling and aggregating
@@ -90,7 +91,7 @@ def setup_seed(seed):
     torch.cuda.manual_seed_all(123+seed)
 
 def init_wandb_logger(option):
-    if option['use_wandb_logging']:
+    if option['use_wandb_logging'] and not option['debug']:
         import wandb
         run_name = 'baseline' if option['prototype_loss_weight'] == 0 else 'proto_w_{}'.format(option['prototype_loss_weight'])
         run_name += '_train{}_eval{}'.format(option['num_train_steps'], option['num_val_steps'])
@@ -136,7 +137,7 @@ def initialize(option):
     utils.fmodule.TaskCalculator.setOP(getattr(importlib.import_module('torch.optim'), option['optimizer']))
     utils.fmodule.Model = getattr(importlib.import_module(bmk_model_path), 'Model')
     utils.fmodule.wandb_logger = init_wandb_logger(option)
-    setattr(utils.fmodule, "local_logger", Custom_Logger(option))
+    utils.fmodule.local_logger = Custom_Logger(option) if not option['debug'] else None
 
     # task_reader = getattr(importlib.import_module(bmk_core_path), 'TaskReader')(taskpath=os.path.join('fedtask', option['task']))
     task_reader = getattr(importlib.import_module(bmk_core_path), 'TaskReader')

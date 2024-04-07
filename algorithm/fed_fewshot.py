@@ -223,14 +223,19 @@ class Client(BasicClient):
         loss = F.cross_entropy(logits, query_labels)
         if (
             self.option["prototype_loss_weight"] > 0
-            and isinstance(local_protos, torch.Tensor)
-            and isinstance(global_protos, torch.Tensor)
+            and isinstance(local_protos, dict)
+            and isinstance(global_protos, dict)
         ):
+            cnt = 0
+            proto_loss = 0
             for cls in local_protos.keys():
                 if cls in global_protos:
-                    loss += self.option["prototype_loss_weight"] * F.mse_loss(
+                    proto_loss += self.option["prototype_loss_weight"] * F.mse_loss(
                         local_protos[cls], global_protos[cls]
                     )
+                    cnt += 1
+            if cnt > 0:
+                loss += (proto_loss / cnt)
         return loss
 
     def compute_class_prototypes(self, model):

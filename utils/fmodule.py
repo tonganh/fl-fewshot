@@ -5,6 +5,7 @@ device=None
 TaskCalculator=None
 Model = None
 wandb_logger = None
+local_logger = None
 
 class FModule(nn.Module):
     def __init__(self):
