@@ -1,3 +1,4 @@
+from datetime import timedelta, datetime
 import numpy as np
 import argparse
 import random
@@ -23,6 +24,10 @@ def read_option():
     parser.add_argument('--data_split', help='path to client data split', type=str, default=None)
     parser.add_argument('--root_data', help='path to folder contain torch vision cifar 100 dataset', type=str, default=None)
     parser.add_argument('--prototype_loss_weight', help='weights for prototype loss', type=float, default=0)
+    parser.add_argument('--use_wandb_logging', help='use wandb logging', action='store_true', default=False)
+    parser.add_argument('--log_dir', help='', type=str, default='logs')
+
+    
     # methods of server side for sampling and aggregating
     parser.add_argument('--sample', help='methods for sampling clients', type=str, choices=sample_list, default='uniform')
     parser.add_argument('--aggregate', help='methods for aggregating models', type=str, choices=agg_list, default='none')
@@ -84,6 +89,41 @@ def setup_seed(seed):
     torch.manual_seed(12+seed)
     torch.cuda.manual_seed_all(123+seed)
 
+def init_wandb_logger(option):
+    if option['use_wandb_logging']:
+        import wandb
+        run_name = 'baseline' if option['prototype_loss_weight'] == 0 else 'proto_w_{}'.format(option['prototype_loss_weight'])
+        run_name += '_train{}_eval{}'.format(option['num_train_steps'], option['num_val_steps'])
+        wandb.login(key="835e03fed77f3418a3bcf4cd09a93bf951d32b91")
+        wandb.init(project="fed_fewshot", entity="aiotlab", name=run_name, config=option, reinit=True)
+        return wandb
+    else:
+        return None
+
+def get_current_time_str():
+    utc_now = datetime.utcnow()
+
+    # Calculate the Vietnam local time (ICT, UTC+7)
+    vietnam_time = utc_now + timedelta(hours=7)
+
+    return vietnam_time.strftime("%d-%m_%H-%M")
+
+class Custom_Logger:
+    def __init__(self, option):
+        current_time = get_current_time_str()
+        self.log_dir = os.path.join(option['log_dir'], current_time)
+        os.makedirs(self.log_dir, exist_ok=True)
+        self.log_file = os.path.join(self.log_dir, 'log.jsonl')
+    
+    def log(self, data):
+        self.write_jsonl(self.log_file, data)
+        
+    def write_jsonl(self, file_path, data, mode='a'):
+        with open(file_path, mode, encoding='utf8') as f:
+            json.dump(data, f, ensure_ascii=False)
+            f.write('\n')
+
+
 def initialize(option):
     # init fedtask
     print("init fedtask...", end='')
@@ -95,6 +135,9 @@ def initialize(option):
     utils.fmodule.TaskCalculator = getattr(importlib.import_module(bmk_core_path), 'TaskCalculator')
     utils.fmodule.TaskCalculator.setOP(getattr(importlib.import_module('torch.optim'), option['optimizer']))
     utils.fmodule.Model = getattr(importlib.import_module(bmk_model_path), 'Model')
+    utils.fmodule.wandb_logger = init_wandb_logger(option)
+    setattr(utils.fmodule, "local_logger", Custom_Logger(option))
+
     # task_reader = getattr(importlib.import_module(bmk_core_path), 'TaskReader')(taskpath=os.path.join('fedtask', option['task']))
     task_reader = getattr(importlib.import_module(bmk_core_path), 'TaskReader')
 

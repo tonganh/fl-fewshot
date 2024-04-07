@@ -4,6 +4,7 @@ from torch import nn
 device=None
 TaskCalculator=None
 Model = None
+wandb_logger = None
 
 class FModule(nn.Module):
     def __init__(self):

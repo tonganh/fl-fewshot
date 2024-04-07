@@ -13,7 +13,8 @@
 test*
 split_seen.log
 split_unseen.log
-
+logs
+wandb
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

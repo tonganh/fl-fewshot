@@ -4,7 +4,8 @@ import copy
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
 import torch
-
+def compute_basic_stats(values):
+    return torch.mean(values).item(), torch.min(values).item(), torch.max(values).item()
 
 class Server(BasicServer):
     def __init__(self, option, model, clients):
@@ -21,6 +22,16 @@ class Server(BasicServer):
             return
 
         self.aggregate(data)
+        self.log()
+
+    def log(self):
+        wandb_logger = fmodule.wandb_logger
+        if wandb_logger is not None:
+            wandb_logger.log(self.latest_round_stats)
+
+        local_logger = getattr(fmodule, "local_logger", None)
+        if local_logger is not None:
+            local_logger.log(self.latest_round_client_stats)
 
     def aggregate(self, data):
         # aggregate model
@@ -45,6 +56,32 @@ class Server(BasicServer):
         for cls_id in cls_protos:
             cls_protos[cls_id] /= num_clients[cls_id]
             self.cls_protos[cls_id] = cls_protos[cls_id]
+
+        # update mean, min, max
+        keys = ['train_loss', 'train_acc', 'test_loss', 'test_acc']
+        stats = {k: [] for k in keys}
+        client_stats = []
+        for client_res in data:
+            client_res1 = {
+                "name": client_res["name"],
+            }
+            for k in keys:
+                stats[k].append(client_res[k])
+                client_res1[k] = client_res[k]
+            client_stats.append(client_res1)    
+            
+        self.latest_round_client_stats = client_stats
+        
+        stats1 = {}
+        for k in keys:
+            vals = torch.tensor(stats[k])
+            mean, min_val, max_val = compute_basic_stats(vals)
+            stats1[f'{k}_mean'] = mean
+            stats1[f'{k}_min'] = min_val
+            stats1[f'{k}_max'] = max_val
+        
+        self.latest_round_stats = stats1
+
 
     def pack(self, client_id):
         pkg = {"model": copy.deepcopy(self.model), "cls_protos": None}
@@ -95,7 +132,9 @@ class Client(BasicClient):
         train_loss, train_acc = self.eval(model, "train")
         test_loss, test_acc = self.eval(model, "test")
 
+        
         return {
+            "name": self.name,
             "model": model,
             "train_loss": train_loss,
             "train_acc": train_acc,
