@@ -27,7 +27,8 @@ def read_option():
     parser.add_argument('--use_wandb_logging', help='use wandb logging', action='store_true', default=False)
     parser.add_argument('--log_dir', help='', type=str, default='logs')
     parser.add_argument('--debug', action='store_true', default=False)
-
+    parser.add_argument('--num_round_per_aggregation', help='number of communication rounds per aggregation', type=int, default=1)
+    parser.add_argument('--use_lrscheduler', action='store_true', default=False)
     
     # methods of server side for sampling and aggregating
     parser.add_argument('--sample', help='methods for sampling clients', type=str, choices=sample_list, default='uniform')
@@ -146,21 +147,20 @@ def initialize(option):
         task_reader = task_reader(data_path=option['root_data'], data_split_path=option['data_split'])
     else:
         task_reader = task_reader(taskpath=os.path.join('fedtask', option['task']))
-    train_datas, valid_datas, test_data, client_names = task_reader.read_data()
-    valid_datas = test_data
+    client_train_data, _, global_test_data, client_names = task_reader.read_data()
     num_clients = len(client_names)
     print("done")
     # init client
     print('init clients...', end='')
     client_path = '%s.%s' % ('algorithm', option['algorithm'])
     Client=getattr(importlib.import_module(client_path), 'Client')
-    clients = [Client(option, name = client_names[cid], train_data = train_datas[cid], valid_data = valid_datas[cid]) for cid in range(num_clients)]
+    clients = [Client(option, name = client_names[cid], train_data = client_train_data[cid]) for cid in range(num_clients)]
     print('done')
 
     # init server
     print("init server...", end='')
     server_path = '%s.%s' % ('algorithm', option['algorithm'])
-    server = getattr(importlib.import_module(server_path), 'Server')(option, utils.fmodule.Model().to(utils.fmodule.device), clients)
+    server = getattr(importlib.import_module(server_path), 'Server')(option, utils.fmodule.Model().to(utils.fmodule.device), clients, global_test_data)
     print('done')
     return server
 

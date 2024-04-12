@@ -31,6 +31,64 @@ def split_data(dataset, num_clients=None, num_train_cls_per_client=None, num_tes
         if y not in data.keys():
             data[y] = []
         data[y].append(i)
+    
+    # import json
+    # with open("labels.json", 'r') as f:
+    #     labels = json.load(f)
+    # if labels == tmp:
+    #     print("labels are the same")
+    # else:
+    #     print("labels are not the same")
+    # import pdb; pdb.set_trace()
+
+    cur_client = {}
+    for cls_id in data.keys():
+        cur_client[cls_id] = 0
+        random.shuffle(data[cls_id])
+    
+
+    cls = list(data.keys())
+    num_train_cls = int(len(cls) * 0.7)
+    num_test_cls = len(cls) - num_train_cls
+
+    test_cls = random.sample(cls, num_test_cls)
+    train_cls = [i for i in cls if i not in test_cls]
+
+
+    client_train_cls, num_client_per_cls = split_cls_between_client(train_cls, num_clients, num_train_cls_per_client)
+    client_test_cls, num_client_per_cls1 = split_cls_between_client(test_cls, num_clients, num_test_cls_per_client)                                                           
+    num_client_per_cls.update(num_client_per_cls1)
+    num_data_per_client_per_cls = {i: int(len(data[i]) / num_client_per_cls[i]) for i in data.keys()}
+
+    client_datas = []
+    for client_id in range(num_clients):
+        client_data = {"train": [], 'test': [], 'train_labels': [], 'test_labels': []}
+        for cls_id in client_train_cls[client_id]:
+            l = cur_client[cls_id] * num_data_per_client_per_cls[cls_id]
+            r = len(data[cls_id]) if cur_client[cls_id] == num_client_per_cls[cls_id] - 1 else (cur_client[cls_id] + 1) * num_data_per_client_per_cls[cls_id]
+            client_data['train'] += data[cls_id][l:r]
+            client_data['train_labels'] += [cls_id] * (r-l)
+            cur_client[cls_id] += 1
+    
+        for cls_id in client_test_cls[client_id]:
+            l = cur_client[cls_id] * num_data_per_client_per_cls[cls_id]
+            r = len(data[cls_id]) if cur_client[cls_id] == num_client_per_cls[cls_id] - 1 else (cur_client[cls_id] + 1) * num_data_per_client_per_cls[cls_id]
+            client_data['test'] += data[cls_id][l:r]
+            client_data['test_labels'] += [cls_id] * (r-l)
+            cur_client[cls_id] += 1
+        client_datas.append(client_data)
+    
+    return client_datas
+
+def split_data1(dataset, num_clients=None, num_train_cls_per_client=None, num_test_cls_per_client=None):
+    # this only differ from the above that test data now used for global model
+    # caution this only work if class have equal number of data
+    data = {}
+    for i in range(len(dataset)):
+        X, y = dataset[i]
+        if y not in data.keys():
+            data[y] = []
+        data[y].append(i)
 
     cur_client = {}
     for cls_id in data.keys():
@@ -46,9 +104,14 @@ def split_data(dataset, num_clients=None, num_train_cls_per_client=None, num_tes
     train_cls = [i for i in cls if i not in test_cls]
 
     client_train_cls, num_client_per_cls = split_cls_between_client(train_cls, num_clients, num_train_cls_per_client)
-    client_test_cls, num_client_per_cls1 = split_cls_between_client(test_cls, num_clients, num_test_cls_per_client)                                                           
-    num_client_per_cls.update(num_client_per_cls1)
-    num_data_per_client_per_cls = {i: int(len(data[i]) / num_client_per_cls[i]) for i in data.keys()}
+    num_data_per_client_per_cls = {i: int(len(data[i]) / num_client_per_cls[i]) for i in num_client_per_cls.keys()}
+
+
+    test_data_ids = []
+    test_data_labels = []
+    for t_cls in test_cls:
+        test_data_ids += data[t_cls]
+        test_data_labels += [t_cls] * len(data[t_cls])
 
     client_datas = []
     for client_id in range(num_clients):
@@ -57,20 +120,12 @@ def split_data(dataset, num_clients=None, num_train_cls_per_client=None, num_tes
             l = cur_client[cls_id] * num_data_per_client_per_cls[cls_id]
             r = len(data[cls_id]) if cur_client[cls_id] == num_client_per_cls[cls_id] - 1 else (cur_client[cls_id] + 1) * num_data_per_client_per_cls[cls_id]
             client_data['train'] += data[cls_id][l:r]
-            client_data['train_labels'] += [cls_id] * (r-l+1)
+            client_data['train_labels'] += [cls_id] * (r-l)
             cur_client[cls_id] += 1
     
-        for cls_id in client_test_cls[client_id]:
-            l = cur_client[cls_id] * num_data_per_client_per_cls[cls_id]
-            r = len(data[cls_id]) if cur_client[cls_id] == num_client_per_cls[cls_id] - 1 else (cur_client[cls_id] + 1) * num_data_per_client_per_cls[cls_id]
-            client_data['test'] += data[cls_id][l:r]
-            client_data['test_labels'] += [cls_id] * (r-l+1)
-            cur_client[cls_id] += 1
-
         client_datas.append(client_data)
     
-    return client_datas
-
+    return {"test_data_ids": test_data_ids, 'test_data_labels': test_data_labels, 'client_data': client_datas}
 
 if __name__ == "__main__":
     rawdata_path = "./benchmark/cifar100/data/"
@@ -105,7 +160,7 @@ if __name__ == "__main__":
     num_clients = 70
     num_train_cls_per_client = 20
     num_test_cls_per_client = 8
-    data = split_data(dataset, num_clients, num_train_cls_per_client, num_test_cls_per_client)
+    data = split_data1(dataset, num_clients, num_train_cls_per_client, num_test_cls_per_client)
     with open("client_data.json", 'w') as f:
         json.dump(data, f)
 

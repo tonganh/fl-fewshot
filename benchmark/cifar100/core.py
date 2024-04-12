@@ -115,17 +115,17 @@ class TaskReader(XYTaskReader):
 
     def read_data(self):
         with open(self.data_split_path, "r") as f:
-            client_data = json.load(f)
+            data = json.load(f)
         
+        client_data = data['client_data']
         client_names = range(len(client_data))
         train_datas = [
             XYDatasetFewShot(self.dataset, client_data[i]['train'], client_data[i]['train_labels'])
             for i in client_names]
-        test_datas = [
-            XYDatasetFewShot(self.dataset, client_data[i]['test'], client_data[i]['test_labels'])
-            for i in client_names]
+
+        global_test_data = XYDatasetFewShot(self.dataset, data['test_data_ids'], data['test_data_labels'])
         
-        return train_datas, None, test_datas, client_names
+        return train_datas, None, global_test_data, client_names
 
 
     
