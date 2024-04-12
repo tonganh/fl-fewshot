@@ -32,3 +32,15 @@ python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split client_da
     --num_rounds 100 --num_train_steps 200 --num_val_steps 200 \
     --learning_rate 0.001 --proportion 1.0 --gpu 0 --num_threads 4 --num_loader_workers 1 \
     --use_wandb_logging --prototype_loss_weight 0.01 
+
+
+
+python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split client_data.json --root_data benchmark/cifar100/data --model resnet18_fewshot --algorithm fed_fewshot \
+    --num_rounds 100 --num_train_steps 200 --num_val_steps 200 \
+    --learning_rate 0.00001 --proportion 1.0 --gpu 0 --num_threads 4 --num_loader_workers 1 \
+    --use_wandb_logging --prototype_loss_weight 0.0 
+
+python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split client_data.json --root_data benchmark/cifar100/data --model resnet18_fewshot --algorithm fed_fewshot \
+    --num_rounds 100 --num_train_steps 200 --num_val_steps 200 \
+    --learning_rate 0.00001 --proportion 1.0 --gpu 0 --num_threads 4 --num_loader_workers 1 \
+    --use_wandb_logging --prototype_loss_weight 0.1 
