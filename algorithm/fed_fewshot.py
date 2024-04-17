@@ -30,9 +30,10 @@ class Server(BasicServer):
 
         stats, clients_stats = self.aggregate(data, t)
         
-        global_loss, global_acc = self.eval()
-        stats['global_loss'] = global_loss
-        stats['global_acc'] = global_acc
+        if (self.round_id + 1) % self.option['eval_interval'] == 0:
+            global_loss, global_acc = self.eval()
+            stats['global_loss'] = global_loss
+            stats['global_acc'] = global_acc
         
         self.log(stats, clients_stats)
 
