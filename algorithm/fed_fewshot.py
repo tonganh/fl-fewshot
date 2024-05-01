@@ -111,26 +111,29 @@ class Server(BasicServer):
         # aggregate model
         # if (round_id + 1) % self.option['num_round_per_aggregation'] == 0:
         models = [data[i]["model"] for i in range(len(data))]
-        p = [1 / len(data) for i in range(len(data))]
+        norm_val = sum([data[i]["model_coef"] for i in range(len(data))])
+        p = [data[i]['model_coef'] / norm_val for i in range(len(data))]
         model = fmodule._model_average(models, p=p)
         self.model = model
 
-        # aggregate
-        cls_protos = {}
-        num_clients = {}
-        for i in range(len(data)):
-            local_protos = data[i]["cls_protos"]
-            if local_protos is not None:
-                for cls_id in local_protos:
+        # aggregate class prototypes
+        if self.option["prototype_loss_weight"] > 0:
+            cls_total_len = {}
+            for i in range(len(data)):
+                for cls_id in data[i]["cls_data_len"]:
+                    if cls_id not in cls_total_len:
+                        cls_total_len[cls_id] = 0
+                    cls_total_len[cls_id] += data[i]["cls_data_len"][cls_id]
+            
+            cls_protos = {}
+            for i in range(len(data)):
+                for cls_id in data[i]["cls_protos"]:
                     if cls_id not in cls_protos:
                         cls_protos[cls_id] = 0
-                        num_clients[cls_id] = 0
-                    cls_protos[cls_id] += local_protos[cls_id]
-                    num_clients[cls_id] += 1
+                    cls_protos[cls_id] += data[i]["cls_protos"][cls_id] * data[i]["cls_data_len"][cls_id] / cls_total_len[cls_id]
 
-        for cls_id in cls_protos:
-            cls_protos[cls_id] /= num_clients[cls_id]
-            self.cls_protos[cls_id] = cls_protos[cls_id]
+            for cls_id in cls_protos:
+                self.cls_protos[cls_id] = cls_protos[cls_id]
 
         # update mean, min, max
         keys = ['train_loss', 'train_acc', 'test_loss', 'test_acc']
@@ -174,22 +177,17 @@ class Server(BasicServer):
 
 
 class Client(BasicClient):
-    def __init__(self, option, name, train_data, valid_data=None):
-        super(Client, self).__init__(option, name, train_data, valid_data)
+    def __init__(self, option, name, train_data):
+        super(Client, self).__init__(option, name, train_data)
 
         self.option = option
 
         self.train_data = train_data
-        self.test_data = valid_data
 
         self.train_loader = DataLoader(
             self.train_data, batch_size=1, num_workers=self.option["num_loader_workers"]
         )
-        self.test_loader = DataLoader(
-            self.test_data, batch_size=1, num_workers=self.option["num_loader_workers"]
-        )
         self.train_loader_iter = None
-        self.test_loader_iter = None
 
         self.optimizer_cfg = {
             "name": option["optimizer"],
@@ -198,6 +196,12 @@ class Client(BasicClient):
             "momentum": option["momentum"],
         }
         self.iter_per_round = option["num_train_steps"]
+
+        self.model_coef = 1
+        if option['client_model_aggregation'] == 'entropy':
+            self.model_coef = self.train_data.get_entropy()
+
+        self.cls_data_len = self.train_data.get_cls_data_len()
 
     def reply(self, svr_pkg):
 
@@ -214,9 +218,11 @@ class Client(BasicClient):
         return {
             "name": self.name,
             "model": model,
+            "model_coef": self.model_coef,
             "train_loss": train_loss,
             "train_acc": train_acc,
             "cls_protos": cls_protos,
+            "cls_data_len": self.cls_data_len,
         }
 
     def unpack(self, received_pkg):

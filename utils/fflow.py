@@ -29,7 +29,8 @@ def read_option():
     parser.add_argument('--debug', action='store_true', default=False)
     parser.add_argument('--num_round_per_aggregation', help='number of communication rounds per aggregation', type=int, default=1)
     parser.add_argument('--use_lrscheduler', action='store_true', default=False)
-    
+    parser.add_argument('--client_model_aggregation', help='type of client model aggregation. Ex: uniform, entropy', type=str, default="uniform")
+
     # methods of server side for sampling and aggregating
     parser.add_argument('--sample', help='methods for sampling clients', type=str, choices=sample_list, default='uniform')
     parser.add_argument('--aggregate', help='methods for aggregating models', type=str, choices=agg_list, default='none')
@@ -76,7 +77,6 @@ def read_option():
     parser.add_argument('--beta', help='beta in FedFA',type=float, default='1.0')
     parser.add_argument('--gamma', help='gamma in FedFA', type=float, default='0')
     parser.add_argument('--mu', help='mu in fedprox', type=float, default='0.1')
-    
     # server gpu
     parser.add_argument('--server_gpu_id', help='server process on this gpu', type=int, default=0)
     

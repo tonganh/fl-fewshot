@@ -760,6 +760,7 @@ class XYDatasetFewShot(Dataset):
         self.data_repo = data_repo
         self.all_labels = list(set(sample_labels))
         self.cls_samples = {}
+        self.data_len = len(sample_ids)
         for cls_id in self.all_labels:
             self.cls_samples[cls_id] = [
                 sample_ids[i]
@@ -770,11 +771,23 @@ class XYDatasetFewShot(Dataset):
         self.num_shot = num_shot
         self.num_query = num_query
 
+        
+
     def __len__(self):
         # return len(self.Y)
         DEFAULT_LEN_ESTIMATE = 1000000
         return DEFAULT_LEN_ESTIMATE
         # return len(self.Y)
+
+    def get_entropy(self):
+        dist = []
+        for k in self.cls_samples:
+            dist.append(len(self.cls_samples[k])/self.data_len)
+        entropy = -sum([p*np.log(p) for p in dist])
+        return entropy
+
+    def get_cls_data_len(self):
+        return {k: len(self.cls_samples[k]) for k in self.cls_samples}
 
     def get_indices_for_label(self, label, n=5):
         # Find all indices where the value in self.Y equals the label

@@ -75,11 +75,24 @@ python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split client_da
 
 # new script
 python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split client_data.json --root_data benchmark/cifar100/data --model resnet18_fewshot --algorithm fed_fewshot \
-    --num_rounds 300 --num_train_steps 10 --num_val_steps 200 \
+    --num_rounds 300 --num_train_steps 5 --num_val_steps 200 \
     --learning_rate 0.00001 --proportion 1.0 --gpu 0 --num_threads 4 --num_loader_workers 1 \
     --use_wandb_logging --prototype_loss_weight 0 --eval_interval 5
 
 python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split client_data.json --root_data benchmark/cifar100/data --model resnet18_fewshot --algorithm fed_fewshot \
-    --num_rounds 300 --num_train_steps 10 --num_val_steps 200 \
+    --num_rounds 300 --num_train_steps 5 --num_val_steps 200 \
     --learning_rate 0.00001 --proportion 1.0 --gpu 0 --num_threads 4 --num_loader_workers 1 \
     --use_wandb_logging --prototype_loss_weight 1.0 --eval_interval 5
+
+python generate_split.py --dist 1 --save_path datasplit_dirichlet.json
+
+# dirichlet 
+python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split datasplit_dirichlet.json --root_data benchmark/cifar100/data --model resnet18_fewshot --algorithm fed_fewshot \
+    --num_rounds 300 --num_train_steps 5 --num_val_steps 200 \
+    --learning_rate 0.00001 --proportion 1.0 --gpu 0 --num_threads 4 --num_loader_workers 1 \
+    --use_wandb_logging --prototype_loss_weight 0 --eval_interval 5 --client_model_aggregation entropy --debug
+
+python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split datasplit_dirichlet.json --root_data benchmark/cifar100/data --model resnet18_fewshot --algorithm fed_fewshot \
+    --num_rounds 300 --num_train_steps 5 --num_val_steps 200 \
+    --learning_rate 0.00001 --proportion 1.0 --gpu 0 --num_threads 4 --num_loader_workers 1 \
+    --use_wandb_logging --prototype_loss_weight 1.0 --eval_interval 5 --client_model_aggregation entropy

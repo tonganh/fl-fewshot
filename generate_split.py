@@ -1,3 +1,4 @@
+import argparse
 from torchvision import datasets, transforms
 import numpy as np
 from torch.utils.data import ConcatDataset
@@ -127,8 +128,107 @@ def split_data1(dataset, num_clients=None, num_train_cls_per_client=None, num_te
     
     return {"test_data_ids": test_data_ids, 'test_data_labels': test_data_labels, 'client_data': client_datas}
 
+def split_train_test(dataset, train_ratio=0.7):
+    # the train dataset contain <train_ration> of the total class
+    data = {}
+    for i in range(len(dataset)):
+        X, y = dataset[i]
+        if y not in data.keys():
+            data[y] = []
+        data[y].append(i)
+    
+    cls = list(data.keys())
+    num_train_cls = int(len(cls) * 0.7)
+    num_test_cls = len(cls) - num_train_cls
+
+    test_cls = random.sample(cls, num_test_cls)
+    train_cls = [i for i in cls if i not in test_cls]
+
+    train_data = {}
+    test_data = {}
+    for cls_id in cls:
+        if cls_id in train_cls:
+            train_data[cls_id] = data[cls_id]
+        else:
+            test_data[cls_id] = data[cls_id]
+    
+    return train_data, test_data
+
+def split_data_dirichlet(data, num_clients, minvol=10, skewness=0.5, min_data_per_class=5):
+    """label_skew_dirichlet"""
+    min_size = 0
+    total_len = sum([len(data[k]) for k in data])
+    while min_size < minvol:
+        idx_batch = [[] for i in range(num_clients)]
+        for k in data:
+            np.random.shuffle(data[k])
+            proportions = np.random.dirichlet(
+                np.repeat(skewness, num_clients)
+            )
+            ## Balance
+            proportions = np.array(
+                [
+                    p * (len(idx_j) < total_len / num_clients)
+                    for p, idx_j in zip(proportions, idx_batch)
+                ]
+            )
+            idx_k = list(zip(data[k], [k] * len(data[k])))
+            proportions = proportions / proportions.sum()
+            proportions = (np.cumsum(proportions) * len(idx_k)).astype(int)[:-1]
+            idx_batch = [
+                idx_j + idx.tolist()
+                for idx_j, idx in zip(idx_batch, np.split(idx_k, proportions))
+            ]
+            min_size = min([len(idx_j) for idx_j in idx_batch])
+    
+    client_data = []
+    for j in range(num_clients):
+        
+        cls_data = {}
+        for x in idx_batch[j]:
+            if x[1] not in cls_data.keys():
+                cls_data[x[1]] = []
+            cls_data[x[1]].append(x[0])
+        
+        train_ids = []
+        train_labels = []
+        for cls in cls_data:
+            if(len(cls_data[cls]) < min_data_per_class):
+                cls_data[cls] += random.sample(data[cls], min_data_per_class - len(cls_data[cls]))
+            train_ids += cls_data[cls]
+            train_labels += [cls] * len(cls_data[cls])
+
+        client_data.append({"train": train_ids, "train_labels": train_labels})    
+    
+    return client_data
+        
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dist", type=int, help='client data distribution')
+    parser.add_argument("--save_path", type=str, help="path to save the data split")
+    
+    opts = parser.parse_args()
+    # dist 0: iid 
+    # 1: label dirichlet
+    # hyperparameter
+    '''
+        format of data split file:
+        {
+            test_data_ids: list of instance index
+            test_data_labels: list of corresponding class labels
+            client_cls_ids: list of train class ids
+            client_data: [
+                {
+                    train: list of instance indexes
+                    train_labels: list of corresponding class labels
+                }
+            ]
+        }
+    '''
+    num_clients = 70
+    train_ratio = 0.7
     rawdata_path = "./benchmark/cifar100/data/"
+    
     train_data = datasets.CIFAR100(
         rawdata_path,
         train=True,
@@ -156,13 +256,28 @@ if __name__ == "__main__":
         ),
     )
     dataset = ConcatDataset([train_data, test_data])
-    # dataset.targets
-    num_clients = 70
-    num_train_cls_per_client = 20
-    num_test_cls_per_client = 8
-    data = split_data1(dataset, num_clients, num_train_cls_per_client, num_test_cls_per_client)
-    with open("client_data.json", 'w') as f:
-        json.dump(data, f)
+    
+    if opts.dist == 0:
+        num_train_cls_per_client = 20
+        num_test_cls_per_client = 8
+        data_split = split_data1(dataset, num_clients, num_train_cls_per_client, num_test_cls_per_client)
+    elif opts.dist == 1:
+        train_data, test_data = split_train_test(dataset, train_ratio)
+        client_data = split_data_dirichlet(train_data, num_clients, min_data_per_class=10)
+        
+        test_data_ids = []
+        test_data_labels = []
+        for x, y in test_data.items():
+            test_data_ids += y
+            test_data_labels += [x] * len(y)
+
+        data_split = {
+            "client_data": client_data,
+            "test_data_ids": test_data_ids,
+            "test_data_labels": test_data_labels
+        }
+    with open(opts.save_path, 'w') as f:
+        json.dump(data_split, f)
 
 
 
