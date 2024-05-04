@@ -4,7 +4,7 @@ import numpy as np
 from torch.utils.data import ConcatDataset
 import random
 import json
-
+import os
 def basic_stats(data):
     max_v = np.max(data)
     min_v = np.min(data)
@@ -205,6 +205,7 @@ def split_data_dirichlet(data, num_clients, minvol=10, skewness=0.5, min_data_pe
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dist", type=int, help='client data distribution')
+    parser.add_argument("--skewness", type=float, default=0.5, help="skewness of dirichlet")
     parser.add_argument("--save_path", type=str, help="path to save the data split")
     
     opts = parser.parse_args()
@@ -263,7 +264,7 @@ if __name__ == "__main__":
         data_split = split_data1(dataset, num_clients, num_train_cls_per_client, num_test_cls_per_client)
     elif opts.dist == 1:
         train_data, test_data = split_train_test(dataset, train_ratio)
-        client_data = split_data_dirichlet(train_data, num_clients, min_data_per_class=10)
+        client_data = split_data_dirichlet(train_data, num_clients, min_data_per_class=10, skewness=opts.skewness)
         
         test_data_ids = []
         test_data_labels = []
@@ -276,6 +277,8 @@ if __name__ == "__main__":
             "test_data_ids": test_data_ids,
             "test_data_labels": test_data_labels
         }
+    
+    os.makedirs(os.path.dirname(opts.save_path), exist_ok=True)
     with open(opts.save_path, 'w') as f:
         json.dump(data_split, f)
 
