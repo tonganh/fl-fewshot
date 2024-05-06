@@ -101,10 +101,29 @@ python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split datasplit
 
 python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split data_split/cifar100/dirichlet_0.1.json --root_data benchmark/cifar100/data --model resnet18_fewshot --algorithm fed_fewshot \
     --num_rounds 300 --num_train_steps 5 --num_val_steps 200 \
-    --learning_rate 0.00001 --proportion 1.0 --gpu 0 --num_threads 4 --num_loader_workers 1 \
+    --learning_rate 0.00001 --proportion 1.0 --gpu 0 --num_threads 2 --num_loader_workers 1 \
     --use_wandb_logging --prototype_loss_weight 0 --eval_interval 5 --client_model_aggregation entropy 
 
 python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split data_split/cifar100/dirichlet_0.1.json --root_data benchmark/cifar100/data --model resnet18_fewshot --algorithm fed_fewshot \
     --num_rounds 300 --num_train_steps 5 --num_val_steps 200 \
     --learning_rate 0.00001 --proportion 1.0 --gpu 0 --num_threads 4 --num_loader_workers 1 \
     --use_wandb_logging --prototype_loss_weight 1.0 --eval_interval 5 --client_model_aggregation entropy
+
+python generate_split.py --dist 1 --save_path data_split/cifar100/dirichlet_0.5_drop.json --skewness 0.5 --drop_if_lack_data
+python generate_split.py --dist 1 --save_path data_split/cifar100/dirichlet_1.5_drop.json --skewness 1.5 --drop_if_lack_data
+
+# adjust prototypical loss weight
+python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split data_split/cifar100/dirichlet_1.5_drop.json --root_data benchmark/cifar100/data --model resnet18_fewshot --algorithm fed_fewshot \
+    --num_rounds 200 --num_train_steps 5 --num_val_steps 200 \
+    --learning_rate 0.00001 --proportion 1.0 --gpu 0 --num_threads 4 --num_loader_workers 1 \
+    --use_wandb_logging --prototype_loss_weight 0.0 --eval_interval 5 --client_model_aggregation entropy
+
+python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split data_split/cifar100/dirichlet_1.5_drop.json --root_data benchmark/cifar100/data --model resnet18_fewshot --algorithm fed_fewshot \
+    --num_rounds 200 --num_train_steps 5 --num_val_steps 200 \
+    --learning_rate 0.00001 --proportion 1.0 --gpu 0 --num_threads 4 --num_loader_workers 1 \
+    --use_wandb_logging --prototype_loss_weight 10.0 --eval_interval 5 --client_model_aggregation entropy
+
+python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split data_split/cifar100/dirichlet_1.5_drop.json --root_data benchmark/cifar100/data --model resnet18_fewshot --algorithm fed_fewshot \
+    --num_rounds 200 --num_train_steps 5 --num_val_steps 200 \
+    --learning_rate 0.00001 --proportion 1.0 --gpu 0 --num_threads 4 --num_loader_workers 1 \
+    --use_wandb_logging --prototype_loss_weight 100.0 --eval_interval 5 --client_model_aggregation entropy

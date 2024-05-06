@@ -154,7 +154,7 @@ def split_train_test(dataset, train_ratio=0.7):
     
     return train_data, test_data
 
-def split_data_dirichlet(data, num_clients, minvol=10, skewness=0.5, min_data_per_class=5):
+def split_data_dirichlet(opts, data, num_clients, minvol=10, skewness=0.5, min_data_per_class=5):
     """label_skew_dirichlet"""
     min_size = 0
     total_len = sum([len(data[k]) for k in data])
@@ -194,6 +194,8 @@ def split_data_dirichlet(data, num_clients, minvol=10, skewness=0.5, min_data_pe
         train_labels = []
         for cls in cls_data:
             if(len(cls_data[cls]) < min_data_per_class):
+                if opts.drop_if_lack_data:
+                    continue
                 cls_data[cls] += random.sample(data[cls], min_data_per_class - len(cls_data[cls]))
             train_ids += cls_data[cls]
             train_labels += [cls] * len(cls_data[cls])
@@ -207,6 +209,7 @@ if __name__ == "__main__":
     parser.add_argument("--dist", type=int, help='client data distribution')
     parser.add_argument("--skewness", type=float, default=0.5, help="skewness of dirichlet")
     parser.add_argument("--save_path", type=str, help="path to save the data split")
+    parser.add_argument("--drop_if_lack_data", action="store_true", help="drop client if lack of data", default=True)
     
     opts = parser.parse_args()
     # dist 0: iid 
@@ -264,7 +267,7 @@ if __name__ == "__main__":
         data_split = split_data1(dataset, num_clients, num_train_cls_per_client, num_test_cls_per_client)
     elif opts.dist == 1:
         train_data, test_data = split_train_test(dataset, train_ratio)
-        client_data = split_data_dirichlet(train_data, num_clients, min_data_per_class=10, skewness=opts.skewness)
+        client_data = split_data_dirichlet(opts, train_data, num_clients, min_data_per_class=10, skewness=opts.skewness)
         
         test_data_ids = []
         test_data_labels = []
