@@ -5,15 +5,18 @@ from torch.utils.data import DataLoader
 import torch.nn.functional as F
 import torch
 from torch.optim.lr_scheduler import LambdaLR
+
+
 def compute_basic_stats(values):
     return torch.mean(values).item(), torch.min(values).item(), torch.max(values).item()
+
 
 class Server(BasicServer):
     def __init__(self, option, model, clients, test_data):
         super(Server, self).__init__(option, model, clients)
         self.cls_protos = {}
         self.round_id = 0
-        
+
         self.test_data = test_data
         self.test_loader = DataLoader(
             self.test_data, batch_size=1, num_workers=self.option["num_loader_workers"]
@@ -29,12 +32,16 @@ class Server(BasicServer):
             return
 
         stats, clients_stats = self.aggregate(data, t)
-        
+
         if (self.round_id + 1) % self.option['eval_interval'] == 0:
-            global_loss, global_acc = self.eval()
+            # global_loss, global_acc = self.eval()
+            res = self.eval()
+            global_loss = res['test_loss']
+            global_acc = res['test_acc']
+
             stats['global_loss'] = global_loss
             stats['global_acc'] = global_acc
-        
+
         self.log(stats, clients_stats)
 
         self.round_id += 1
@@ -47,7 +54,7 @@ class Server(BasicServer):
         local_logger = getattr(fmodule, "local_logger", None)
         if local_logger is not None:
             local_logger.log(clients_stats)
-    
+
     def compute_loss(self, logits, query_labels, local_protos=None, global_protos=None):
         loss = F.cross_entropy(logits, query_labels)
         if (
@@ -56,17 +63,17 @@ class Server(BasicServer):
             and isinstance(global_protos, dict)
         ):
             cnt = 0
-            proto_loss = 0
+            loss_proto = 0
             for cls in local_protos.keys():
                 if cls in global_protos:
-                    proto_loss += self.option["prototype_loss_weight"] * F.mse_loss(
+                    loss_proto += self.option["prototype_loss_weight"] * F.mse_loss(
                         local_protos[cls], global_protos[cls]
                     )
                     cnt += 1
             if cnt > 0:
-                loss += (proto_loss / cnt)
+                loss += (loss_proto / cnt)
         return loss
-    
+
     def eval(self):
         model = self.model
         model.eval()
@@ -74,8 +81,11 @@ class Server(BasicServer):
         data_loader = self.test_loader
         loader_iter = iter(data_loader)
 
+        res = {}
         with torch.no_grad():
-            total_loss = 0
+            loss_total = 0
+            loss_ce = 0
+            loss_proto = 0
             total_correct = 0
             total_num = 0
             for cur_iter in range(self.option["num_val_steps"]):
@@ -89,16 +99,22 @@ class Server(BasicServer):
 
                 output = model(input)
 
-                loss = self.compute_loss(output["logits"], input["query_labels"])
+                loss = self.compute_loss(
+                    output["logits"], input["query_labels"])
 
-                total_loss += loss.item()
+                loss_total += loss
+
                 total_correct += (
-                    (output["logits"].argmax(1) == input["query_labels"]).sum().item()
+                    (output["logits"].argmax(1) ==
+                     input["query_labels"]).sum().item()
                 )
                 total_num += len(input["query_labels"])
 
-            return total_loss / total_num, total_correct / total_num
-    
+            res['test_loss'] = loss_total / total_num
+            res['test_acc'] = total_correct / total_num
+
+            return res
+
     def prepare_input(self, input):
         for key in input.keys():
             if isinstance(input[key], torch.Tensor):
@@ -106,7 +122,7 @@ class Server(BasicServer):
                 input[key] = input[key].squeeze(0)
         input["query_labels"] = input["query_labels"].to(dtype=torch.long)
         return input
-        
+
     def aggregate(self, data, round_id):
         # aggregate model
         # if (round_id + 1) % self.option['num_round_per_aggregation'] == 0:
@@ -124,19 +140,23 @@ class Server(BasicServer):
                     if cls_id not in cls_total_len:
                         cls_total_len[cls_id] = 0
                     cls_total_len[cls_id] += data[i]["cls_data_len"][cls_id]
-            
+
             cls_protos = {}
             for i in range(len(data)):
                 for cls_id in data[i]["cls_protos"]:
                     if cls_id not in cls_protos:
                         cls_protos[cls_id] = 0
-                    cls_protos[cls_id] += data[i]["cls_protos"][cls_id] * data[i]["cls_data_len"][cls_id] / cls_total_len[cls_id]
+                    cls_protos[cls_id] += data[i]["cls_protos"][cls_id] * \
+                        data[i]["cls_data_len"][cls_id] / cls_total_len[cls_id]
 
             for cls_id in cls_protos:
                 self.cls_protos[cls_id] = cls_protos[cls_id]
 
         # update mean, min, max
-        keys = ['train_loss', 'train_acc', 'test_loss', 'test_acc']
+        # keys = ['train_loss', 'train_acc', 'test_loss', 'test_acc']
+        keys = ['client_loss_total', 'client_loss_ce']
+        if self.option["prototype_loss_weight"] > 0:
+            keys.append('client_loss_proto')
         stats = {k: [] for k in keys}
         client_stats = []
         for client_res in data:
@@ -145,31 +165,34 @@ class Server(BasicServer):
             }
             for k in keys:
                 if k in client_res:
+                    # if k == "client_loss_proto":
+                    #     breakpoint()
                     stats[k].append(client_res[k])
                     client_res1[k] = client_res[k]
-            client_stats.append(client_res1)    
-            
+            client_stats.append(client_res1)
+
         self.latest_round_client_stats = client_stats
-        
+
         stats1 = {}
         for k in keys:
             if len(stats[k]) > 0:
                 vals = torch.tensor(stats[k])
+                # breakpoint()
                 mean, min_val, max_val = compute_basic_stats(vals)
                 stats1[f'{k}_mean'] = mean
             # stats1[f'{k}_min'] = min_val
             # stats1[f'{k}_max'] = max_val
-        
+
         self.latest_round_stats = stats1
 
         return self.latest_round_stats, self.latest_round_client_stats
 
-
     def pack(self, client_id):
-        pkg = {"model": copy.deepcopy(self.model), "cls_protos": {}, 'round_id': self.round_id}
-        if self.cls_protos :
+        pkg = {"model": copy.deepcopy(self.model), "cls_protos": {
+        }, 'round_id': self.round_id}
+        if self.cls_protos:
             pkg["cls_protos"] = copy.deepcopy(self.cls_protos)
-        
+
         return pkg
 
     def unpack(self, received_pkgs):
@@ -205,25 +228,29 @@ class Client(BasicClient):
 
     def reply(self, svr_pkg):
 
-        model, cls_protos, round_id = self.unpack(svr_pkg)
+        model, global_protos, round_id = self.unpack(svr_pkg)
 
-        self.train(model, cls_protos, round_id)
+        res = self.train(model, global_protos, round_id)
 
-        cls_protos = {}
+        local_protos = {}
         if self.option["prototype_loss_weight"] > 0:
-            cls_protos = self.compute_class_prototypes(model)
+            local_protos = self.compute_class_prototypes(model)
 
-        train_loss, train_acc = self.eval(model, "train")
-
-        return {
+        self.eval(model, "train")
+        # breakpoint()
+        res1 = {
             "name": self.name,
             "model": model,
             "model_coef": self.model_coef,
-            "train_loss": train_loss,
-            "train_acc": train_acc,
-            "cls_protos": cls_protos,
+            "client_loss_total": res['loss_total'],
+            'client_loss_ce': res['loss_ce'],
+            # "client_acc": res['test_acc'],
+            "cls_protos": local_protos,
             "cls_data_len": self.cls_data_len,
         }
+        if 'loss_proto' in res:
+            res1['client_loss_proto'] = res['loss_proto']
+        return res1
 
     def unpack(self, received_pkg):
         return received_pkg["model"], received_pkg["cls_protos"], received_pkg['round_id']
@@ -236,14 +263,17 @@ class Client(BasicClient):
         input["query_labels"] = input["query_labels"].to(dtype=torch.long)
         return input
 
-    def eval(self, model, mode="test"):
+    def eval(self, model, mode="test", global_protos=None):
         model.eval()
 
         data_loader = self.test_loader if mode == "test" else self.train_loader
         loader_iter = iter(data_loader)
 
+        res = {}
         with torch.no_grad():
-            total_loss = 0
+            loss_total = 0
+            loss_ce = 0
+            loss_proto = 0
             total_correct = 0
             total_num = 0
             for cur_iter in range(self.option["num_val_steps"]):
@@ -256,29 +286,42 @@ class Client(BasicClient):
                 input = self.prepare_input(data)
 
                 output = model(input)
+                local_protos = output.get("cls_protos", None)
+                loss = self.compute_loss(
+                    output["logits"], input["query_labels"])
+                loss_total += loss['loss_total'].item()
+                loss_ce += loss['loss_ce'].item()
+                if 'loss_proto' in loss:
+                    loss_proto += loss['loss_proto'].item()
 
-                loss = self.compute_loss(output["logits"], input["query_labels"])
-
-                total_loss += loss.item()
                 total_correct += (
-                    (output["logits"].argmax(1) == input["query_labels"]).sum().item()
+                    (output["logits"].argmax(1) ==
+                     input["query_labels"]).sum().item()
                 )
                 total_num += len(input["query_labels"])
 
-            return total_loss / total_num, total_correct / total_num
-    
+            res['test_loss'] = loss_total / total_num
+            res['test_acc'] = total_correct / total_num
+            res['test_loss_ce'] = loss_ce / total_num
+            if loss_proto > 0:
+                res['test_loss_proto'] = loss_proto / total_num
+
+            return res
+
     def init_lr_scheduler(self, optimizer):
         if self.option['use_lrscheduler']:
-            self.lr_scheduler = LambdaLR(optimizer, lr_lambda=lambda lr: lr*0.95)
-    
+            self.lr_scheduler = LambdaLR(
+                optimizer, lr_lambda=lambda lr: lr*0.95)
+
     def adjust_lr(self):
         if self.option['use_lrscheduler']:
             self.lr_scheduler.step()
 
     def train(self, model, global_protos, round_id):
-        optimizer = self.calculator.get_optimizer(model=model, **self.optimizer_cfg)
+        optimizer = self.calculator.get_optimizer(
+            model=model, **self.optimizer_cfg)
         gradient_accumulation_steps = 4
-        
+
         self.init_lr_scheduler(optimizer)
 
         model.train()
@@ -286,7 +329,9 @@ class Client(BasicClient):
 
         if self.train_loader_iter is None:
             self.train_loader_iter = iter(self.train_loader)
-
+        res = {'loss_total': [], 'loss_ce': []}
+        if self.option["prototype_loss_weight"] > 0:
+            res['loss_proto'] = []
         for cur_iter in range(self.option["num_train_steps"]):
             try:
                 input = next(self.train_loader_iter)
@@ -304,7 +349,12 @@ class Client(BasicClient):
                 output["cls_protos"],
                 global_protos,
             )
-            loss.backward()
+            loss['loss_total'].backward()
+
+            res["loss_total"].append(loss['loss_total'].item())
+            res["loss_ce"].append(loss['loss_ce'].item())
+            if 'loss_proto' in loss:
+                res['loss_proto'].append(loss['loss_proto'].item())
 
             if ((cur_iter + 1) % gradient_accumulation_steps == 0) or (
                 (cur_iter + 1) == self.iter_per_round
@@ -312,24 +362,40 @@ class Client(BasicClient):
                 optimizer.step()
                 optimizer.zero_grad()
                 self.adjust_lr()
+        res['loss_total'] = (sum(res['loss_total']) /
+                             len(res['loss_total']))
+        res['loss_ce'] = (sum(res['loss_ce']) / len(res['loss_ce']))
+        if 'loss_proto' in res:
+            if len(res['loss_proto']) > 0:
+                res['loss_proto'] = (
+                    sum(res['loss_proto']) / len(res['loss_proto']))
+            else:
+                res.pop('loss_proto')
+
+        return res
 
     def compute_loss(self, logits, query_labels, local_protos=None, global_protos=None):
-        loss = F.cross_entropy(logits, query_labels)
+        loss = {"loss_total": 0, "loss_ce": 0}
+        loss['loss_total'] = F.cross_entropy(logits, query_labels)
+        loss['loss_ce'] = loss['loss_total']
         if (
             self.option["prototype_loss_weight"] > 0
             and isinstance(local_protos, dict)
             and isinstance(global_protos, dict)
         ):
             cnt = 0
-            proto_loss = 0
+            loss_proto = 0
             for cls in local_protos.keys():
                 if cls in global_protos:
-                    proto_loss += self.option["prototype_loss_weight"] * F.mse_loss(
+                    loss_proto += self.option["prototype_loss_weight"] * F.mse_loss(
                         local_protos[cls], global_protos[cls]
                     )
                     cnt += 1
             if cnt > 0:
-                loss += (proto_loss / cnt)
+                if loss_proto > 0:
+                    loss["loss_proto"] = (loss_proto / cnt)
+                    loss["loss_total"] += loss["loss_proto"]
+
         return loss
 
     def compute_class_prototypes(self, model):
