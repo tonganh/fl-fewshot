@@ -81,7 +81,7 @@ def split_data(dataset, num_clients=None, num_train_cls_per_client=None, num_tes
     
     return client_datas
 
-def split_data1(dataset, num_clients=None, num_train_cls_per_client=None, num_test_cls_per_client=None):
+def split_data1(dataset, num_clients=None, num_train_cls_per_client=None):
     # this only differ from the above that test data now used for global model
     # caution this only work if class have equal number of data
     data = {}
@@ -210,7 +210,7 @@ if __name__ == "__main__":
     parser.add_argument("--skewness", type=float, default=0.5, help="skewness of dirichlet")
     parser.add_argument("--save_path", type=str, help="path to save the data split")
     parser.add_argument("--drop_if_lack_data", action="store_true", help="drop client if lack of data", default=True)
-    
+    parser.add_argument("--num_clients", type=int, help="number of clients", default=70)
     opts = parser.parse_args()
     # dist 0: iid 
     # 1: label dirichlet
@@ -229,7 +229,7 @@ if __name__ == "__main__":
             ]
         }
     '''
-    num_clients = 70
+    num_clients = opts.num_clients
     train_ratio = 0.7
     rawdata_path = "./benchmark/cifar100/data/"
     
@@ -263,8 +263,8 @@ if __name__ == "__main__":
     
     if opts.dist == 0:
         num_train_cls_per_client = 20
-        num_test_cls_per_client = 8
-        data_split = split_data1(dataset, num_clients, num_train_cls_per_client, num_test_cls_per_client)
+        data_split = split_data1(dataset, num_clients, num_train_cls_per_client)
+   
     elif opts.dist == 1:
         train_data, test_data = split_train_test(dataset, train_ratio)
         client_data = split_data_dirichlet(opts, train_data, num_clients, min_data_per_class=10, skewness=opts.skewness)
