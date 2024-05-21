@@ -66,12 +66,14 @@ class Server(BasicServer):
             loss_proto = 0
             for cls in local_protos.keys():
                 if cls in global_protos:
-                    loss_proto += self.option["prototype_loss_weight"] * F.mse_loss(
+                    loss_proto = loss_proto + (self.option["prototype_loss_weight"] * F.mse_loss(
                         local_protos[cls], global_protos[cls]
-                    )
+                    ))
                     cnt += 1
-            if cnt > 0:
-                loss += (loss_proto / cnt)
+            if cnt > 0 and loss_proto > 0:
+                loss_proto = loss_proto / cnt
+                loss = loss + loss_proto
+
         return loss
 
     def eval(self):
@@ -102,7 +104,7 @@ class Server(BasicServer):
                 loss = self.compute_loss(
                     output["logits"], input["query_labels"])
 
-                loss_total += loss
+                loss_total = loss_total + loss.item()
 
                 total_correct += (
                     (output["logits"].argmax(1) ==
@@ -165,8 +167,6 @@ class Server(BasicServer):
             }
             for k in keys:
                 if k in client_res:
-                    # if k == "client_loss_proto":
-                    #     breakpoint()
                     stats[k].append(client_res[k])
                     client_res1[k] = client_res[k]
             client_stats.append(client_res1)
@@ -177,11 +177,12 @@ class Server(BasicServer):
         for k in keys:
             if len(stats[k]) > 0:
                 vals = torch.tensor(stats[k])
-                # breakpoint()
-                mean, min_val, max_val = compute_basic_stats(vals)
+                mean, _, _ = compute_basic_stats(vals)
                 stats1[f'{k}_mean'] = mean
-            # stats1[f'{k}_min'] = min_val
-            # stats1[f'{k}_max'] = max_val
+        
+        if 'client_loss_proto_mean' in stats1:
+            print(stats1['client_loss_total_mean'], stats1['client_loss_ce_mean'], stats1['client_loss_proto_mean'])
+            # assert (stats1['client_loss_total_mean'] - stats1['client_loss_ce_mean'] - stats1['client_loss_proto_mean']) < 1e-4
 
         self.latest_round_stats = stats1
 
@@ -244,12 +245,12 @@ class Client(BasicClient):
             "model_coef": self.model_coef,
             "client_loss_total": res['loss_total'],
             'client_loss_ce': res['loss_ce'],
-            # "client_acc": res['test_acc'],
             "cls_protos": local_protos,
             "cls_data_len": self.cls_data_len,
         }
         if 'loss_proto' in res:
             res1['client_loss_proto'] = res['loss_proto']
+        
         return res1
 
     def unpack(self, received_pkg):
@@ -286,9 +287,10 @@ class Client(BasicClient):
                 input = self.prepare_input(data)
 
                 output = model(input)
-                local_protos = output.get("cls_protos", None)
+                
                 loss = self.compute_loss(
                     output["logits"], input["query_labels"])
+                
                 loss_total += loss['loss_total'].item()
                 loss_ce += loss['loss_ce'].item()
                 if 'loss_proto' in loss:
@@ -329,9 +331,11 @@ class Client(BasicClient):
 
         if self.train_loader_iter is None:
             self.train_loader_iter = iter(self.train_loader)
+        
         res = {'loss_total': [], 'loss_ce': []}
         if self.option["prototype_loss_weight"] > 0:
             res['loss_proto'] = []
+        
         for cur_iter in range(self.option["num_train_steps"]):
             try:
                 input = next(self.train_loader_iter)
@@ -362,6 +366,7 @@ class Client(BasicClient):
                 optimizer.step()
                 optimizer.zero_grad()
                 self.adjust_lr()
+        
         res['loss_total'] = (sum(res['loss_total']) /
                              len(res['loss_total']))
         res['loss_ce'] = (sum(res['loss_ce']) / len(res['loss_ce']))
@@ -387,15 +392,13 @@ class Client(BasicClient):
             loss_proto = 0
             for cls in local_protos.keys():
                 if cls in global_protos:
-                    loss_proto += self.option["prototype_loss_weight"] * F.mse_loss(
+                    loss_proto = loss_proto + self.option["prototype_loss_weight"] * F.mse_loss(
                         local_protos[cls], global_protos[cls]
                     )
                     cnt += 1
-            if cnt > 0:
-                if loss_proto > 0:
-                    loss["loss_proto"] = (loss_proto / cnt)
-                    loss["loss_total"] += loss["loss_proto"]
-
+            if loss_proto > 0:
+                loss["loss_proto"] = (loss_proto / cnt)
+                loss["loss_total"] = loss['loss_total'] + loss["loss_proto"]
         return loss
 
     def compute_class_prototypes(self, model):
