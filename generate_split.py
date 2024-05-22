@@ -101,9 +101,10 @@ def split_data1(dataset, num_clients=None, num_train_cls_per_client=None):
     num_train_cls = int(len(cls) * 0.7)
     num_test_cls = len(cls) - num_train_cls
 
+    random.shuffle(cls)
     test_cls = random.sample(cls, num_test_cls)
     train_cls = [i for i in cls if i not in test_cls]
-
+    
     client_train_cls, num_client_per_cls = split_cls_between_client(train_cls, num_clients, num_train_cls_per_client)
     num_data_per_client_per_cls = {i: int(len(data[i]) / num_client_per_cls[i]) for i in num_client_per_cls.keys()}
 
