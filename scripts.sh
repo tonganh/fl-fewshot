@@ -139,3 +139,10 @@ python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split data_spli
     --num_rounds 200 --num_train_steps 5 --num_val_steps 200 \
     --learning_rate 0.00001 --proportion 0.5 --gpu 0 --num_threads 4 --num_loader_workers 1 \
     --use_wandb_logging --prototype_loss_weight 10.0 --eval_interval 5 --client_model_aggregation entropy
+
+python generate_split.py --dist 0 --num_clients 2 --save_path data_split/cifar100/iid_c2.json --num_train_cls_per_client 70
+
+python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split data_split/cifar100/iid_c70.json --root_data benchmark/cifar100/data --model resnet18_fewshot --algorithm fed_fewshot \
+    --num_rounds 200 --num_train_steps 10 --num_val_steps 200 \
+    --learning_rate 0.00001 --proportion 1.0 --gpu 0 --num_threads 2 --num_loader_workers 1 \
+    --use_wandb_logging --prototype_loss_weight 0.0 --eval_interval 5 --client_model_aggregation entropy

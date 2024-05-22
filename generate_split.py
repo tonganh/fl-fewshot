@@ -212,6 +212,7 @@ if __name__ == "__main__":
     parser.add_argument("--save_path", type=str, help="path to save the data split")
     parser.add_argument("--drop_if_lack_data", action="store_true", help="drop client if lack of data", default=True)
     parser.add_argument("--num_clients", type=int, help="number of clients", default=70)
+    parser.add_argument("--num_train_cls_per_client", type=int, help="number of train class per client", default=20)
     opts = parser.parse_args()
     # dist 0: iid 
     # 1: label dirichlet
@@ -263,7 +264,7 @@ if __name__ == "__main__":
     dataset = ConcatDataset([train_data, test_data])
     
     if opts.dist == 0:
-        num_train_cls_per_client = 20
+        num_train_cls_per_client = opts.num_train_cls_per_client
         data_split = split_data1(dataset, num_clients, num_train_cls_per_client)
    
     elif opts.dist == 1:
