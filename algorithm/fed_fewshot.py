@@ -320,11 +320,12 @@ class Client(BasicClient):
             self.lr_scheduler.step()
 
     def train(self, model, global_protos, round_id):
-        optimizer = self.calculator.get_optimizer(
-            model=model, **self.optimizer_cfg)
+        # optimizer = self.calculator.get_optimizer(
+        #     model=model, **self.optimizer_cfg)
+        # self.init_lr_scheduler(optimizer)
+        
+        optimizer = torch.optim.Adam(model.parameters(), lr=self.option['learning_rate'])
         gradient_accumulation_steps = 4
-
-        self.init_lr_scheduler(optimizer)
 
         model.train()
         optimizer.zero_grad()
@@ -365,7 +366,7 @@ class Client(BasicClient):
             ):
                 optimizer.step()
                 optimizer.zero_grad()
-                self.adjust_lr()
+                # self.adjust_lr()
         
         res['loss_total'] = (sum(res['loss_total']) /
                              len(res['loss_total']))

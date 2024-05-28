@@ -21,7 +21,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 tmp
-
+data_split/cifar100/c1.json
 # C extensions
 *.so
 
