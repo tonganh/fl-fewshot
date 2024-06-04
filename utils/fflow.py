@@ -30,7 +30,16 @@ def read_option():
     parser.add_argument('--num_round_per_aggregation', help='number of communication rounds per aggregation', type=int, default=1)
     parser.add_argument('--use_lrscheduler', action='store_true', default=False)
     parser.add_argument('--client_model_aggregation', help='type of client model aggregation. Ex: uniform, entropy', type=str, default="uniform")
-
+    
+    # logging
+    parser.add_argument("--local_log", action="store_true", default=False)
+    parser.add_argument("--log_checkpoint", action="store_true", default=False)
+    parser.add_argument("--log_confusion_matrix", action="store_true", default=False)
+    
+    # config file 
+    parser.add_argument("--cfg", default=None)
+    #
+    parser.add_argument("--num_val_steps_1", type=int, default=200)
     # methods of server side for sampling and aggregating
     parser.add_argument('--sample', help='methods for sampling clients', type=str, choices=sample_list, default='uniform')
     parser.add_argument('--aggregate', help='methods for aggregating models', type=str, choices=agg_list, default='none')
@@ -82,6 +91,15 @@ def read_option():
     
     try: option = vars(parser.parse_args())
     except IOError as msg: parser.error(str(msg))
+
+    if option['cfg'] != None:
+        import yaml
+        with open(option['cfg'], 'r') as f:
+            cfg = yaml.safe_load(option['cfg'])
+        for k, v in cfg.items():
+            if k not in option:
+                option[k] = v
+        
     return option
 
 def setup_seed(seed):
@@ -138,7 +156,7 @@ def initialize(option):
     utils.fmodule.TaskCalculator.setOP(getattr(importlib.import_module('torch.optim'), option['optimizer']))
     utils.fmodule.Model = getattr(importlib.import_module(bmk_model_path), 'Model')
     utils.fmodule.wandb_logger = init_wandb_logger(option)
-    utils.fmodule.local_logger = Custom_Logger(option) if not option['debug'] else None
+    # utils.fmodule.local_logger = Custom_Logger(option) if not option['debug'] else None
 
     # task_reader = getattr(importlib.import_module(bmk_core_path), 'TaskReader')(taskpath=os.path.join('fedtask', option['task']))
     task_reader = getattr(importlib.import_module(bmk_core_path), 'TaskReader')

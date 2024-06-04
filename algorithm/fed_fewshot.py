@@ -1,3 +1,5 @@
+import os
+from utils.fflow import get_current_time_str
 from .fedbase import BasicServer, BasicClient
 from utils import fmodule
 import copy
@@ -5,7 +7,7 @@ from torch.utils.data import DataLoader
 import torch.nn.functional as F
 import torch
 from torch.optim.lr_scheduler import LambdaLR
-
+import json
 
 def compute_basic_stats(values):
     return torch.mean(values).item(), torch.min(values).item(), torch.max(values).item()
@@ -22,6 +24,21 @@ class Server(BasicServer):
             self.test_data, batch_size=1, num_workers=self.option["num_loader_workers"]
         )
 
+        if option['local_log']:
+            current_time = get_current_time_str()
+            self.log_dir = os.path.join(option['log_dir'], current_time)
+            os.makedirs(self.log_dir, exist_ok=True)
+            self.last_checkpoint = None
+        
+        self.log_checkpoint = option['log_checkpoint'] and option['local_log']
+        self.log_confusion_matrix = option['log_confusion_matrix'] and option['local_log']
+        self.cf_mat_rounds = [0, option['num_rounds']/2, option['num_rounds']-1]
+        
+        if self.log_confusion_matrix:
+            self.preds_save_path = os.path.join(self.log_dir, 'predictions.jsonl')
+            if "client_ids" not in option:
+                self.option["client_ids"] = range(len(clients))
+    
     def iterate(self, t):
         self.selected_clients = self.sample()
         # self.selected_clients = [0]
@@ -42,9 +59,47 @@ class Server(BasicServer):
             stats['global_loss'] = global_loss
             stats['global_acc'] = global_acc
 
+        # checkpoint
+        if self.log_checkpoint and ((self.round_id + 1) % self.option['eval_interval'] == 0 or self.round_id == self.option['num_rounds'] - 1):
+            self.checkpoint(self.round_id)
+
+        # confusion matrix
+        if self.log_confusion_matrix and self.round_id in self.cf_mat_rounds:
+            self.compute_confusion_matrix()
+
+        # wandb logging
         self.log(stats, clients_stats)
 
         self.round_id += 1
+    
+    def compute_confusion_matrix(self):
+        log = []        
+        res = self.eval(num_val_steps=self.option['num_val_steps_1'])
+        log.append({"client_id": -1, "round_id": self.round_id , "preds": res['preds']})
+        for c in self.option['client_ids']:
+            res = self.clients[c].eval(self.test_loader, self.option['num_val_steps_1'])
+            if res != None:
+                log.append({"client_id": c, "round_id": self.round_id , "preds": res['preds'], "data": "global"})
+                res = self.clients[c].eval(num_val_steps = self.option['num_val_steps_1'])
+                log.append({"client_id": c, "round_id": self.round_id , "preds": res['preds'], "data": "local"})
+        
+        with open(self.preds_save_path, 'a') as f:
+            for line in log:
+                json_data = json.dumps(line)
+                f.write(json_data + "\n")
+
+    
+    def checkpoint(self, round_id):
+        ckpt = {
+            "global_model": self.model,
+            "round_id": round_id,
+            "cls_protos": self.cls_protos,
+            "option": self.option,
+        }
+        if self.last_checkpoint is not None:
+            os.remove(self.last_checkpoint)
+        self.last_checkpoint = os.path.join(self.log_dir, f'ckpt_{round_id}.pth')
+        torch.save(ckpt, self.last_checkpoint)
 
     def log(self, aggregate_stats, clients_stats):
         wandb_logger = fmodule.wandb_logger
@@ -76,21 +131,25 @@ class Server(BasicServer):
 
         return loss
 
-    def eval(self):
+    def eval(self, num_val_steps=None):
         model = self.model
+        if model == None:
+            return None
+        
         model.eval()
 
         data_loader = self.test_loader
         loader_iter = iter(data_loader)
 
-        res = {}
+        res = {"preds": []}
+        if num_val_steps is not None:
+            num_val_steps = self.option["num_val_steps"]
+        
         with torch.no_grad():
             loss_total = 0
-            loss_ce = 0
-            loss_proto = 0
             total_correct = 0
             total_num = 0
-            for cur_iter in range(self.option["num_val_steps"]):
+            for _ in range(num_val_steps):
                 try:
                     data = next(loader_iter)
                 except StopIteration:
@@ -111,6 +170,11 @@ class Server(BasicServer):
                      input["query_labels"]).sum().item()
                 )
                 total_num += len(input["query_labels"])
+
+                pred = output["logits"].argmax(1)
+                pred = [input['class_ids'][i].item() for i in pred]
+                gt = [input['class_ids'][i].item() for i in input["query_labels"]]
+                res['preds'] += list(zip(pred, gt))
 
             res['test_loss'] = loss_total / total_num
             res['test_acc'] = total_correct / total_num
@@ -232,12 +296,12 @@ class Client(BasicClient):
         model, global_protos, round_id = self.unpack(svr_pkg)
 
         res = self.train(model, global_protos, round_id)
-
+        self.model = model
+        
         local_protos = {}
         if self.option["prototype_loss_weight"] > 0:
             local_protos = self.compute_class_prototypes(model)
 
-        self.eval(model, "train")
         # breakpoint()
         res1 = {
             "name": self.name,
@@ -264,20 +328,25 @@ class Client(BasicClient):
         input["query_labels"] = input["query_labels"].to(dtype=torch.long)
         return input
 
-    def eval(self, model, mode="test", global_protos=None):
+    def eval(self, data_loader=None, num_val_steps=None):
+        model = self.model
+        if model == None:
+            return None
         model.eval()
 
-        data_loader = self.test_loader if mode == "test" else self.train_loader
+        if data_loader == None:
+            data_loader = self.train_loader
         loader_iter = iter(data_loader)
 
-        res = {}
+        res = {"preds": []}
+        if num_val_steps is None:
+            num_val_steps = self.option["num_val_steps"]
+        
         with torch.no_grad():
             loss_total = 0
-            loss_ce = 0
-            loss_proto = 0
             total_correct = 0
             total_num = 0
-            for cur_iter in range(self.option["num_val_steps"]):
+            for _ in range(num_val_steps):
                 try:
                     data = next(loader_iter)
                 except StopIteration:
@@ -287,14 +356,11 @@ class Client(BasicClient):
                 input = self.prepare_input(data)
 
                 output = model(input)
-                
+
                 loss = self.compute_loss(
                     output["logits"], input["query_labels"])
-                
-                loss_total += loss['loss_total'].item()
-                loss_ce += loss['loss_ce'].item()
-                if 'loss_proto' in loss:
-                    loss_proto += loss['loss_proto'].item()
+
+                loss_total = loss_total + loss['loss_total'].item()
 
                 total_correct += (
                     (output["logits"].argmax(1) ==
@@ -302,11 +368,13 @@ class Client(BasicClient):
                 )
                 total_num += len(input["query_labels"])
 
+                pred = output["logits"].argmax(1)
+                pred = [input['class_ids'][i].item() for i in pred]
+                gt = [input['class_ids'][i].item() for i in input["query_labels"]]
+                res['preds'] += list(zip(pred, gt))
+
             res['test_loss'] = loss_total / total_num
             res['test_acc'] = total_correct / total_num
-            res['test_loss_ce'] = loss_ce / total_num
-            if loss_proto > 0:
-                res['test_loss_proto'] = loss_proto / total_num
 
             return res
 
