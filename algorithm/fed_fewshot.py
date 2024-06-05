@@ -142,7 +142,7 @@ class Server(BasicServer):
         loader_iter = iter(data_loader)
 
         res = {"preds": []}
-        if num_val_steps is not None:
+        if num_val_steps == None:
             num_val_steps = self.option["num_val_steps"]
         
         with torch.no_grad():

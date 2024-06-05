@@ -211,5 +211,5 @@ python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split data_spli
 python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split data_split/cifar100/dirichlet_0.1_drop.json --root_data benchmark/cifar100/data --model resnet18_fewshot --algorithm fed_fewshot \
     --num_rounds 500 --num_train_steps 20 --num_val_steps 200 \
     --learning_rate 0.00001 --proportion 0.1 --gpu 0 --num_threads 3 --num_loader_workers 1 \
-    --use_wandb_logging --prototype_loss_weight 0.0 --eval_interval 5 --client_model_aggregation entropy \
+    --use_wandb_logging --prototype_loss_weight 5.0 --eval_interval 5 --client_model_aggregation entropy \
     --local_log --log_checkpoint --log_confusion_matrix --num_val_steps_1 400
