@@ -29,6 +29,13 @@ class Server(BasicServer):
             self.log_dir = os.path.join(option['log_dir'], current_time)
             os.makedirs(self.log_dir, exist_ok=True)
             self.last_checkpoint = None
+            
+            cfg_path = os.path.join(self.log_dir, 'config.yaml')
+            import yaml
+            with open(cfg_path, 'w') as f:
+                yaml.dump(option, f)
+            
+
         
         self.log_checkpoint = option['log_checkpoint'] and option['local_log']
         self.log_confusion_matrix = option['log_confusion_matrix'] and option['local_log']
