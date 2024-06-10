@@ -183,6 +183,8 @@ def split_data_dirichlet(opts, data, num_clients, minvol=10, skewness=0.5, min_d
             min_size = min([len(idx_j) for idx_j in idx_batch])
     
     client_data = []
+    lack_data_cls_clients = {}
+    rem_data = {}
     for j in range(num_clients):
         
         cls_data = {}
@@ -193,15 +195,39 @@ def split_data_dirichlet(opts, data, num_clients, minvol=10, skewness=0.5, min_d
         
         train_ids = []
         train_labels = []
+        
         for cls in cls_data:
             if(len(cls_data[cls]) < min_data_per_class):
                 if opts.drop_if_lack_data:
                     continue
-                cls_data[cls] += random.sample(data[cls], min_data_per_class - len(cls_data[cls]))
-            train_ids += cls_data[cls]
-            train_labels += [cls] * len(cls_data[cls])
+                else:
+                    if cls not in lack_data_cls_clients:
+                        lack_data_cls_clients[cls] = []
+                    lack_data_cls_clients[cls].append(j)
+                    if cls not in rem_data:
+                        rem_data[cls] = []
+                    rem_data[cls] += cls_data[cls]
+                    # cls_data[cls] += random.sample(data[cls], min_data_per_class - len(cls_data[cls]))
+            else:
+                train_ids += cls_data[cls]
+                train_labels += [cls] * len(cls_data[cls])
+        
+        client_data.append({"train": train_ids, "train_labels": train_labels})  
 
-        client_data.append({"train": train_ids, "train_labels": train_labels})    
+    # redistribute remaining data
+    if not opts.drop_if_lack_data:
+        for cls in lack_data_cls_clients:
+            num_rem_data = len(rem_data[cls])
+            num_compensate = int(num_rem_data / min_data_per_class)
+            if num_compensate > 0:
+                compensate_clients = random.sample(lack_data_cls_clients[cls], num_compensate)
+                for i in range(0, num_compensate):
+                    l = i * min_data_per_class
+                    r = (i + 1) * min_data_per_class if i < num_compensate-1 else num_rem_data
+                    train_ids = rem_data[cls][l:r]
+                    train_labels = [cls] * len(train_ids)
+                    client_data[compensate_clients[i]]['train'] += train_ids
+                    client_data[compensate_clients[i]]['train_labels'] += train_labels
     
     return client_data
         
@@ -210,7 +236,7 @@ if __name__ == "__main__":
     parser.add_argument("--dist", type=int, help='client data distribution')
     parser.add_argument("--skewness", type=float, default=0.5, help="skewness of dirichlet")
     parser.add_argument("--save_path", type=str, help="path to save the data split")
-    parser.add_argument("--drop_if_lack_data", action="store_true", help="drop client if lack of data", default=True)
+    parser.add_argument("--drop_if_lack_data", action="store_true", help="drop client if lack of data", default=False)
     parser.add_argument("--num_clients", type=int, help="number of clients", default=70)
     parser.add_argument("--num_train_cls_per_client", type=int, help="number of train class per client", default=20)
     opts = parser.parse_args()

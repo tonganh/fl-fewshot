@@ -1,16 +1,20 @@
 import matplotlib.pyplot as plt
-import numpy as np
 
-# Generate random data
-data = np.random.randn(1000)
+# Sample data
+categories = ['A', 'B', 'C', 'D']
+values1 = [20, 30, 25, 35]
+values2 = [15, 25, 20, 30]
 
-# Plot histogram
-plt.hist(data, bins=30, edgecolor='black')
+# Plotting
+plt.bar(categories, values1, label='Group 1')
+plt.bar(categories, values2, bottom=values1, label='Group 2')
 
-# Add titles and labels
-plt.title('Histogram of Data Distribution')
-plt.xlabel('Value')
-plt.ylabel('Frequency')
+# Adding labels and title
+plt.xlabel('Categories')
+plt.ylabel('Values')
+plt.title('Stacked Bar Plot')
+plt.legend()
 
-# Show plot
+# Display the plot
 plt.savefig('test.png')
+

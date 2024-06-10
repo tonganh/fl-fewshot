@@ -202,16 +202,15 @@ python generate_split.py --dist 1 --num_clients 70 --save_path data_split/cifar1
 python plot_data_dist.py --data_path data_split/cifar100/dirichlet_0.1_drop.json  --save_dir tmp/client_plot_0.1 --plot_type client
 python plot_data_dist.py --data_path data_split/cifar100/dirichlet_0.1_drop.json  --save_dir tmp/data_plot_0.1 --plot_type data
 
-python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split data_split/cifar100/dirichlet_0.1_drop.json --root_data benchmark/cifar100/data --model resnet18_fewshot --algorithm fed_fewshot \
+python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split data_split/cifar100/dirichlet_0.1_nodrop.json --root_data benchmark/cifar100/data --model resnet18_fewshot --algorithm fed_fewshot \
     --num_rounds 500 --num_train_steps 20 --num_val_steps 200 \
-    --learning_rate 0.00001 --proportion 0.1 --gpu 0 --num_threads 3 --num_loader_workers 1 \
+    --learning_rate 0.00001 --proportion 0.1 --gpu 0 --num_threads 1 --num_loader_workers 1 \
     --use_wandb_logging --prototype_loss_weight 0.0 --eval_interval 5 --client_model_aggregation entropy \
     --local_log --log_checkpoint --log_confusion_matrix --num_val_steps_1 400
-
-python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split data_split/cifar100/dirichlet_0.1_drop.json --root_data benchmark/cifar100/data --model resnet18_fewshot --algorithm fed_fewshot \
+python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split data_split/cifar100/dirichlet_0.1_nodrop.json --root_data benchmark/cifar100/data --model resnet18_fewshot --algorithm fed_fewshot \
     --num_rounds 500 --num_train_steps 20 --num_val_steps 200 \
     --learning_rate 0.00001 --proportion 0.1 --gpu 0 --num_threads 3 --num_loader_workers 1 \
-    --use_wandb_logging --prototype_loss_weight 5.0 --eval_interval 5 --client_model_aggregation entropy \
+    --use_wandb_logging --prototype_loss_weight 20.0 --eval_interval 5 --client_model_aggregation entropy \
     --local_log --log_checkpoint --log_confusion_matrix --num_val_steps_1 400
 
 python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split data_split/cifar100/dirichlet_0.1_drop.json --root_data benchmark/cifar100/data --model resnet18_fewshot --algorithm fed_fewshot \
@@ -225,3 +224,12 @@ python main.py --task cifar100_cnum70_dist9_skew0.8_seed0 --data_split data_spli
     --learning_rate 0.00001 --proportion 0.5 --gpu 0 --num_threads 3 --num_loader_workers 1 \
     --use_wandb_logging --prototype_loss_weight 5.0 --eval_interval 5 --client_model_aggregation entropy \
     --local_log --log_checkpoint --log_confusion_matrix --num_val_steps_1 400
+
+python generate_split.py --dist 1 --num_clients 70 --save_path data_split/cifar100/dirichlet_0.1_nodrop.json --skewness 0.1 
+
+python plot_data_dist1.py --save_path tmp/dir0.1_nodrop.png --data_path data_split/cifar100/dirichlet_0.1_nodrop.json
+python plot_data_dist1.py --save_path tmp/dir0.1_drop.png --data_path data_split/cifar100/dirichlet_0.1_drop.json
+
+python plot_confusion_matrix.py --data_path logs/10-06_00-22/predictions.jsonl --save_dir tmp/confusion_matrix/baseline_nodrop
+python plot_confusion_matrix.py --data_path logs/10-06_01-41/predictions.jsonl --save_dir tmp/confusion_matrix/proto_dir0.1_nodrop
+
